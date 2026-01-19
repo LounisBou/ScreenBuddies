@@ -1,0 +1,1781 @@
+# Phase 5: Flutter Foundation
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Set up Flutter project with Riverpod state management, GoRouter navigation, Dio HTTP client, theme system, and authentication screens.
+
+**Architecture:** Clean architecture with data/domain/presentation layers. Riverpod for state management. GoRouter for declarative routing. Dio with interceptors for API calls.
+
+**Tech Stack:** Flutter 3.x, Riverpod 2.x, GoRouter, Dio, flutter_secure_storage
+
+**Prerequisites:** Phase 4 complete (backend API ready)
+
+---
+
+## Task 1: Create Flutter Project
+
+**Files:**
+- Create: `frontend/` (new Flutter project)
+
+**Step 1: Create new Flutter project**
+
+```bash
+cd /Users/lounis/dev/ScreenBuddies
+flutter create --org com.screenbuddies --platforms=android,ios,web frontend
+```
+
+**Step 2: Verify installation**
+
+```bash
+cd frontend && flutter doctor
+flutter run -d chrome
+```
+Expected: Default Flutter app runs in browser
+
+**Step 3: Clean up default files**
+
+Remove test file and simplify main.dart:
+```bash
+rm frontend/test/widget_test.dart
+```
+
+**Step 4: Commit**
+
+```bash
+cd /Users/lounis/dev/ScreenBuddies/frontend
+git init
+git add .
+git commit -m "chore: initialize Flutter project"
+```
+
+---
+
+## Task 2: Add Dependencies
+
+**Files:**
+- Modify: `frontend/pubspec.yaml`
+
+**Step 1: Update pubspec.yaml**
+
+Replace dependencies in `frontend/pubspec.yaml`:
+```yaml
+name: screenbuddies
+description: Group decision app for movies, games, and more.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # Navigation
+  go_router: ^13.0.0
+
+  # HTTP & API
+  dio: ^5.4.0
+  retrofit: ^4.0.3
+  json_annotation: ^4.8.1
+
+  # Storage
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.2
+
+  # UI
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.1
+  flutter_svg: ^2.0.9
+
+  # Utils
+  intl: ^0.18.1
+  equatable: ^2.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+  retrofit_generator: ^8.0.6
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true
+  generate: true
+```
+
+**Step 2: Install dependencies**
+
+```bash
+cd frontend && flutter pub get
+```
+
+**Step 3: Enable localization**
+
+Create `frontend/l10n.yaml`:
+```yaml
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "chore: add project dependencies"
+```
+
+---
+
+## Task 3: Create Directory Structure
+
+**Files:**
+- Create: Multiple directories
+
+**Step 1: Create directory structure**
+
+```bash
+cd frontend/lib
+mkdir -p core/config core/constants core/errors core/extensions core/theme core/utils
+mkdir -p data/datasources/remote data/datasources/local data/models data/repositories
+mkdir -p domain/entities domain/enums
+mkdir -p presentation/providers presentation/router presentation/screens presentation/widgets/common
+mkdir -p l10n services
+```
+
+**Step 2: Create placeholder files**
+
+Create `frontend/lib/core/config/app_config.dart`:
+```dart
+class AppConfig {
+  static const String appName = 'ScreenBuddies';
+  static const String apiBaseUrl = 'http://localhost:8000/api/v1';
+
+  // For production, use environment variables
+  static String get baseUrl {
+    const envUrl = String.fromEnvironment('API_URL');
+    return envUrl.isNotEmpty ? envUrl : apiBaseUrl;
+  }
+}
+```
+
+**Step 3: Commit**
+
+```bash
+git add .
+git commit -m "chore: create directory structure"
+```
+
+---
+
+## Task 4: Create Theme System
+
+**Files:**
+- Create: `frontend/lib/core/theme/app_theme.dart`
+- Create: `frontend/lib/core/theme/app_colors.dart`
+- Create: `frontend/lib/core/theme/app_typography.dart`
+
+**Step 1: Create app colors**
+
+Create `frontend/lib/core/theme/app_colors.dart`:
+```dart
+import 'package:flutter/material.dart';
+
+class AppColors {
+  // Primary palette
+  static const Color primary = Color(0xFF6366F1);
+  static const Color primaryLight = Color(0xFF818CF8);
+  static const Color primaryDark = Color(0xFF4F46E5);
+
+  // Secondary palette
+  static const Color secondary = Color(0xFF10B981);
+  static const Color secondaryLight = Color(0xFF34D399);
+  static const Color secondaryDark = Color(0xFF059669);
+
+  // Neutral palette
+  static const Color background = Color(0xFFF9FAFB);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceVariant = Color(0xFFF3F4F6);
+
+  // Text colors
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textTertiary = Color(0xFF9CA3AF);
+
+  // Status colors
+  static const Color success = Color(0xFF10B981);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color error = Color(0xFFEF4444);
+  static const Color info = Color(0xFF3B82F6);
+
+  // Dark theme
+  static const Color darkBackground = Color(0xFF111827);
+  static const Color darkSurface = Color(0xFF1F2937);
+  static const Color darkSurfaceVariant = Color(0xFF374151);
+  static const Color darkTextPrimary = Color(0xFFF9FAFB);
+  static const Color darkTextSecondary = Color(0xFFD1D5DB);
+}
+```
+
+**Step 2: Create typography**
+
+Create `frontend/lib/core/theme/app_typography.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+class AppTypography {
+  static TextTheme get textTheme {
+    return TextTheme(
+      displayLarge: GoogleFonts.inter(
+        fontSize: 57,
+        fontWeight: FontWeight.w400,
+        letterSpacing: -0.25,
+      ),
+      displayMedium: GoogleFonts.inter(
+        fontSize: 45,
+        fontWeight: FontWeight.w400,
+      ),
+      displaySmall: GoogleFonts.inter(
+        fontSize: 36,
+        fontWeight: FontWeight.w400,
+      ),
+      headlineLarge: GoogleFonts.inter(
+        fontSize: 32,
+        fontWeight: FontWeight.w600,
+      ),
+      headlineMedium: GoogleFonts.inter(
+        fontSize: 28,
+        fontWeight: FontWeight.w600,
+      ),
+      headlineSmall: GoogleFonts.inter(
+        fontSize: 24,
+        fontWeight: FontWeight.w600,
+      ),
+      titleLarge: GoogleFonts.inter(
+        fontSize: 22,
+        fontWeight: FontWeight.w500,
+      ),
+      titleMedium: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.15,
+      ),
+      titleSmall: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.1,
+      ),
+      bodyLarge: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.5,
+      ),
+      bodyMedium: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.25,
+      ),
+      bodySmall: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.4,
+      ),
+      labelLarge: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.1,
+      ),
+      labelMedium: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.5,
+      ),
+      labelSmall: GoogleFonts.inter(
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+}
+```
+
+**Step 3: Create app theme**
+
+Create `frontend/lib/core/theme/app_theme.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'app_colors.dart';
+import 'app_typography.dart';
+
+class AppTheme {
+  static ThemeData get light {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorScheme: ColorScheme.light(
+        primary: AppColors.primary,
+        onPrimary: Colors.white,
+        secondary: AppColors.secondary,
+        onSecondary: Colors.white,
+        surface: AppColors.surface,
+        onSurface: AppColors.textPrimary,
+        background: AppColors.background,
+        onBackground: AppColors.textPrimary,
+        error: AppColors.error,
+        onError: Colors.white,
+      ),
+      textTheme: AppTypography.textTheme,
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+      ),
+      cardTheme: CardTheme(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        color: AppColors.surface,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.surfaceVariant,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+    );
+  }
+
+  static ThemeData get dark {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.dark(
+        primary: AppColors.primaryLight,
+        onPrimary: Colors.white,
+        secondary: AppColors.secondaryLight,
+        onSecondary: Colors.white,
+        surface: AppColors.darkSurface,
+        onSurface: AppColors.darkTextPrimary,
+        background: AppColors.darkBackground,
+        onBackground: AppColors.darkTextPrimary,
+        error: AppColors.error,
+        onError: Colors.white,
+      ),
+      textTheme: AppTypography.textTheme,
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: AppColors.darkSurface,
+        foregroundColor: AppColors.darkTextPrimary,
+      ),
+      cardTheme: CardTheme(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        color: AppColors.darkSurface,
+      ),
+    );
+  }
+}
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "feat: add theme system"
+```
+
+---
+
+## Task 5: Create API Client with Dio
+
+**Files:**
+- Create: `frontend/lib/data/datasources/remote/api_client.dart`
+- Create: `frontend/lib/data/datasources/local/secure_storage.dart`
+- Create: `frontend/lib/core/errors/api_exception.dart`
+
+**Step 1: Create API exception**
+
+Create `frontend/lib/core/errors/api_exception.dart`:
+```dart
+class ApiException implements Exception {
+  final String code;
+  final String message;
+  final int statusCode;
+  final Map<String, dynamic>? details;
+
+  ApiException({
+    required this.code,
+    required this.message,
+    required this.statusCode,
+    this.details,
+  });
+
+  factory ApiException.fromJson(Map<String, dynamic> json, int statusCode) {
+    final error = json['error'] as Map<String, dynamic>?;
+    return ApiException(
+      code: error?['code'] ?? 'UNKNOWN_ERROR',
+      message: error?['message'] ?? 'An unknown error occurred',
+      statusCode: statusCode,
+      details: error?['details'] as Map<String, dynamic>?,
+    );
+  }
+
+  @override
+  String toString() => 'ApiException: [$code] $message';
+}
+```
+
+**Step 2: Create secure storage**
+
+Create `frontend/lib/data/datasources/local/secure_storage.dart`:
+```dart
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+class SecureStorage {
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  static const _accessTokenKey = 'access_token';
+  static const _refreshTokenKey = 'refresh_token';
+
+  Future<void> saveTokens({
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    await _storage.write(key: _accessTokenKey, value: accessToken);
+    await _storage.write(key: _refreshTokenKey, value: refreshToken);
+  }
+
+  Future<String?> getAccessToken() async {
+    return _storage.read(key: _accessTokenKey);
+  }
+
+  Future<String?> getRefreshToken() async {
+    return _storage.read(key: _refreshTokenKey);
+  }
+
+  Future<void> clearTokens() async {
+    await _storage.delete(key: _accessTokenKey);
+    await _storage.delete(key: _refreshTokenKey);
+  }
+
+  Future<bool> hasTokens() async {
+    final token = await getAccessToken();
+    return token != null && token.isNotEmpty;
+  }
+}
+```
+
+**Step 3: Create API client**
+
+Create `frontend/lib/data/datasources/remote/api_client.dart`:
+```dart
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/errors/api_exception.dart';
+import '../local/secure_storage.dart';
+
+class ApiClient {
+  late final Dio _dio;
+  final SecureStorage _storage;
+  final Ref _ref;
+
+  ApiClient(this._ref, this._storage) {
+    _dio = Dio(BaseOptions(
+      baseUrl: AppConfig.baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    ));
+
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: _onRequest,
+      onError: _onError,
+    ));
+  }
+
+  Future<void> _onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    final token = await _storage.getAccessToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
+  Future<void> _onError(
+    DioException error,
+    ErrorInterceptorHandler handler,
+  ) async {
+    if (error.response?.statusCode == 401) {
+      // Try refresh token
+      final refreshed = await _tryRefreshToken();
+      if (refreshed) {
+        // Retry original request
+        final response = await _retry(error.requestOptions);
+        return handler.resolve(response);
+      }
+    }
+    handler.next(error);
+  }
+
+  Future<bool> _tryRefreshToken() async {
+    try {
+      final refreshToken = await _storage.getRefreshToken();
+      if (refreshToken == null) return false;
+
+      final response = await Dio().post(
+        '${AppConfig.baseUrl}/auth/refresh',
+        data: {'refresh_token': refreshToken},
+      );
+
+      final data = response.data['data'];
+      await _storage.saveTokens(
+        accessToken: data['access_token'],
+        refreshToken: data['refresh_token'],
+      );
+      return true;
+    } catch (_) {
+      await _storage.clearTokens();
+      return false;
+    }
+  }
+
+  Future<Response> _retry(RequestOptions requestOptions) async {
+    final token = await _storage.getAccessToken();
+    final options = Options(
+      method: requestOptions.method,
+      headers: {
+        ...requestOptions.headers,
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    return _dio.request(
+      requestOptions.path,
+      data: requestOptions.data,
+      queryParameters: requestOptions.queryParameters,
+      options: options,
+    );
+  }
+
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await _dio.get(path, queryParameters: queryParameters);
+      return response.data as T;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<T> post<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await _dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      );
+      return response.data as T;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<T> put<T>(
+    String path, {
+    dynamic data,
+  }) async {
+    try {
+      final response = await _dio.put(path, data: data);
+      return response.data as T;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> delete(String path) async {
+    try {
+      await _dio.delete(path);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  ApiException _handleError(DioException e) {
+    if (e.response?.data != null && e.response!.data is Map) {
+      return ApiException.fromJson(
+        e.response!.data as Map<String, dynamic>,
+        e.response!.statusCode ?? 500,
+      );
+    }
+    return ApiException(
+      code: 'NETWORK_ERROR',
+      message: e.message ?? 'Network error occurred',
+      statusCode: e.response?.statusCode ?? 500,
+    );
+  }
+}
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "feat: add API client with Dio"
+```
+
+---
+
+## Task 6: Create Auth Provider
+
+**Files:**
+- Create: `frontend/lib/data/models/user_model.dart`
+- Create: `frontend/lib/presentation/providers/auth_provider.dart`
+
+**Step 1: Create User model**
+
+Create `frontend/lib/data/models/user_model.dart`:
+```dart
+import 'package:equatable/equatable.dart';
+
+class User extends Equatable {
+  final int id;
+  final String email;
+  final String? displayName;
+  final String? avatarUrl;
+  final bool emailVerified;
+  final String locale;
+  final bool notifEmail;
+  final bool notifPush;
+  final DateTime createdAt;
+
+  const User({
+    required this.id,
+    required this.email,
+    this.displayName,
+    this.avatarUrl,
+    required this.emailVerified,
+    required this.locale,
+    required this.notifEmail,
+    required this.notifPush,
+    required this.createdAt,
+  });
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'] as int,
+      email: json['email'] as String,
+      displayName: json['display_name'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
+      emailVerified: json['email_verified'] as bool,
+      locale: json['locale'] as String,
+      notifEmail: json['notif_email'] as bool,
+      notifPush: json['notif_push'] as bool,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, email, displayName, emailVerified];
+}
+
+class AuthTokens {
+  final String accessToken;
+  final String refreshToken;
+  final int expiresIn;
+
+  const AuthTokens({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.expiresIn,
+  });
+
+  factory AuthTokens.fromJson(Map<String, dynamic> json) {
+    return AuthTokens(
+      accessToken: json['access_token'] as String,
+      refreshToken: json['refresh_token'] as String,
+      expiresIn: json['expires_in'] as int,
+    );
+  }
+}
+```
+
+**Step 2: Create auth provider**
+
+Create `frontend/lib/presentation/providers/auth_provider.dart`:
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/errors/api_exception.dart';
+import '../../data/datasources/local/secure_storage.dart';
+import '../../data/datasources/remote/api_client.dart';
+import '../../data/models/user_model.dart';
+
+// Secure storage provider
+final secureStorageProvider = Provider((ref) => SecureStorage());
+
+// API client provider
+final apiClientProvider = Provider((ref) {
+  final storage = ref.read(secureStorageProvider);
+  return ApiClient(ref, storage);
+});
+
+// Auth state
+enum AuthStatus { unknown, authenticated, unauthenticated }
+
+class AuthState {
+  final AuthStatus status;
+  final User? user;
+  final bool isLoading;
+  final String? error;
+
+  const AuthState({
+    this.status = AuthStatus.unknown,
+    this.user,
+    this.isLoading = false,
+    this.error,
+  });
+
+  AuthState copyWith({
+    AuthStatus? status,
+    User? user,
+    bool? isLoading,
+    String? error,
+  }) {
+    return AuthState(
+      status: status ?? this.status,
+      user: user ?? this.user,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+}
+
+// Auth notifier
+class AuthNotifier extends StateNotifier<AuthState> {
+  final ApiClient _apiClient;
+  final SecureStorage _storage;
+
+  AuthNotifier(this._apiClient, this._storage) : super(const AuthState()) {
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    final hasTokens = await _storage.hasTokens();
+    if (hasTokens) {
+      try {
+        await _loadUser();
+      } catch (_) {
+        await _storage.clearTokens();
+        state = state.copyWith(status: AuthStatus.unauthenticated);
+      }
+    } else {
+      state = state.copyWith(status: AuthStatus.unauthenticated);
+    }
+  }
+
+  Future<void> _loadUser() async {
+    final response = await _apiClient.get<Map<String, dynamic>>('/me');
+    final user = User.fromJson(response['data'] as Map<String, dynamic>);
+    state = state.copyWith(status: AuthStatus.authenticated, user: user);
+  }
+
+  Future<void> login(String email, String password) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
+
+      final data = response['data'] as Map<String, dynamic>;
+      final user = User.fromJson(data['user'] as Map<String, dynamic>);
+      final tokens = AuthTokens.fromJson(data['tokens'] as Map<String, dynamic>);
+
+      await _storage.saveTokens(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: user,
+        isLoading: false,
+      );
+    } on ApiException catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      rethrow;
+    }
+  }
+
+  Future<void> register({
+    required String email,
+    required String password,
+    String? displayName,
+    String locale = 'en',
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/register',
+        data: {
+          'email': email,
+          'password': password,
+          'password_confirmation': password,
+          'display_name': displayName,
+          'locale': locale,
+        },
+      );
+
+      final data = response['data'] as Map<String, dynamic>;
+      final user = User.fromJson(data['user'] as Map<String, dynamic>);
+      final tokens = AuthTokens.fromJson(data['tokens'] as Map<String, dynamic>);
+
+      await _storage.saveTokens(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: user,
+        isLoading: false,
+      );
+    } on ApiException catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      rethrow;
+    }
+  }
+
+  Future<void> logout() async {
+    try {
+      await _apiClient.post('/auth/logout');
+    } catch (_) {
+      // Ignore logout errors
+    }
+    await _storage.clearTokens();
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+}
+
+// Provider
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  final apiClient = ref.read(apiClientProvider);
+  final storage = ref.read(secureStorageProvider);
+  return AuthNotifier(apiClient, storage);
+});
+```
+
+**Step 3: Commit**
+
+```bash
+git add .
+git commit -m "feat: add auth provider with login/register"
+```
+
+---
+
+## Task 7: Create Router
+
+**Files:**
+- Create: `frontend/lib/presentation/router/app_router.dart`
+
+**Step 1: Create app router**
+
+Create `frontend/lib/presentation/router/app_router.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../providers/auth_provider.dart';
+import '../screens/splash_screen.dart';
+import '../screens/auth/login_screen.dart';
+import '../screens/auth/register_screen.dart';
+import '../screens/home/home_screen.dart';
+
+final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authProvider);
+
+  return GoRouter(
+    initialLocation: '/splash',
+    debugLogDiagnostics: true,
+    redirect: (context, state) {
+      final isAuth = authState.status == AuthStatus.authenticated;
+      final isLoading = authState.status == AuthStatus.unknown;
+      final isSplash = state.matchedLocation == '/splash';
+      final isAuthRoute = state.matchedLocation.startsWith('/auth');
+
+      // Still checking auth status
+      if (isLoading) {
+        return isSplash ? null : '/splash';
+      }
+
+      // Not authenticated, redirect to login
+      if (!isAuth && !isAuthRoute && !isSplash) {
+        return '/auth/login';
+      }
+
+      // Authenticated, redirect away from auth routes
+      if (isAuth && (isAuthRoute || isSplash)) {
+        return '/';
+      }
+
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/auth/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/auth/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const HomeScreen(),
+      ),
+    ],
+  );
+});
+```
+
+**Step 2: Commit**
+
+```bash
+git add .
+git commit -m "feat: add GoRouter with auth redirects"
+```
+
+---
+
+## Task 8: Create Splash Screen
+
+**Files:**
+- Create: `frontend/lib/presentation/screens/splash_screen.dart`
+
+**Step 1: Create splash screen**
+
+Create `frontend/lib/presentation/screens/splash_screen.dart`:
+```dart
+import 'package:flutter/material.dart';
+import '../../core/theme/app_colors.dart';
+
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.primary,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.movie_filter,
+              size: 80,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'ScreenBuddies',
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 48),
+            const CircularProgressIndicator(
+              color: Colors.white,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+**Step 2: Commit**
+
+```bash
+git add .
+git commit -m "feat: add splash screen"
+```
+
+---
+
+## Task 9: Create Login Screen
+
+**Files:**
+- Create: `frontend/lib/presentation/screens/auth/login_screen.dart`
+- Create: `frontend/lib/presentation/widgets/common/app_text_field.dart`
+- Create: `frontend/lib/presentation/widgets/common/app_button.dart`
+
+**Step 1: Create app text field widget**
+
+Create `frontend/lib/presentation/widgets/common/app_text_field.dart`:
+```dart
+import 'package:flutter/material.dart';
+
+class AppTextField extends StatelessWidget {
+  final TextEditingController? controller;
+  final String? labelText;
+  final String? hintText;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
+  final Widget? suffixIcon;
+  final bool enabled;
+
+  const AppTextField({
+    super.key,
+    this.controller,
+    this.labelText,
+    this.hintText,
+    this.obscureText = false,
+    this.keyboardType,
+    this.validator,
+    this.suffixIcon,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      validator: validator,
+      enabled: enabled,
+      decoration: InputDecoration(
+        labelText: labelText,
+        hintText: hintText,
+        suffixIcon: suffixIcon,
+      ),
+    );
+  }
+}
+```
+
+**Step 2: Create app button widget**
+
+Create `frontend/lib/presentation/widgets/common/app_button.dart`:
+```dart
+import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
+
+class AppButton extends StatelessWidget {
+  final String text;
+  final VoidCallback? onPressed;
+  final bool isLoading;
+  final bool isOutlined;
+
+  const AppButton({
+    super.key,
+    required this.text,
+    this.onPressed,
+    this.isLoading = false,
+    this.isOutlined = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final child = isLoading
+        ? const SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          )
+        : Text(text);
+
+    if (isOutlined) {
+      return OutlinedButton(
+        onPressed: isLoading ? null : onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: const BorderSide(color: AppColors.primary),
+        ),
+        child: child,
+      );
+    }
+
+    return ElevatedButton(
+      onPressed: isLoading ? null : onPressed,
+      child: child,
+    );
+  }
+}
+```
+
+**Step 3: Create login screen**
+
+Create `frontend/lib/presentation/screens/auth/login_screen.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/auth_provider.dart';
+import '../../widgets/common/app_button.dart';
+import '../../widgets/common/app_text_field.dart';
+
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    try {
+      await ref.read(authProvider.notifier).login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 48),
+                Text(
+                  'Welcome Back',
+                  style: Theme.of(context).textTheme.headlineLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sign in to continue',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.grey,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 48),
+                AppTextField(
+                  controller: _emailController,
+                  labelText: 'Email',
+                  keyboardType: TextInputType.emailAddress,
+                  enabled: !authState.isLoading,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your email';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _passwordController,
+                  labelText: 'Password',
+                  obscureText: _obscurePassword,
+                  enabled: !authState.isLoading,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your password';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 56,
+                  child: AppButton(
+                    text: 'Sign In',
+                    isLoading: authState.isLoading,
+                    onPressed: _submit,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Don't have an account?"),
+                    TextButton(
+                      onPressed: authState.isLoading
+                          ? null
+                          : () => context.go('/auth/register'),
+                      child: const Text('Sign Up'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "feat: add login screen"
+```
+
+---
+
+## Task 10: Create Register Screen
+
+**Files:**
+- Create: `frontend/lib/presentation/screens/auth/register_screen.dart`
+
+**Step 1: Create register screen**
+
+Create `frontend/lib/presentation/screens/auth/register_screen.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/auth_provider.dart';
+import '../../widgets/common/app_button.dart';
+import '../../widgets/common/app_text_field.dart';
+
+class RegisterScreen extends ConsumerStatefulWidget {
+  const RegisterScreen({super.key});
+
+  @override
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    try {
+      await ref.read(authProvider.notifier).register(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        displayName: _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()
+            : null,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 48),
+                Text(
+                  'Create Account',
+                  style: Theme.of(context).textTheme.headlineLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sign up to get started',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.grey,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 48),
+                AppTextField(
+                  controller: _nameController,
+                  labelText: 'Display Name (optional)',
+                  enabled: !authState.isLoading,
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emailController,
+                  labelText: 'Email',
+                  keyboardType: TextInputType.emailAddress,
+                  enabled: !authState.isLoading,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your email';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _passwordController,
+                  labelText: 'Password',
+                  obscureText: _obscurePassword,
+                  enabled: !authState.isLoading,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a password';
+                    }
+                    if (value.length < 8) {
+                      return 'Password must be at least 8 characters';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _confirmPasswordController,
+                  labelText: 'Confirm Password',
+                  obscureText: _obscureConfirmPassword,
+                  enabled: !authState.isLoading,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirmPassword = !_obscureConfirmPassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (value != _passwordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 56,
+                  child: AppButton(
+                    text: 'Create Account',
+                    isLoading: authState.isLoading,
+                    onPressed: _submit,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Already have an account?'),
+                    TextButton(
+                      onPressed: authState.isLoading
+                          ? null
+                          : () => context.go('/auth/login'),
+                      child: const Text('Sign In'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+**Step 2: Commit**
+
+```bash
+git add .
+git commit -m "feat: add register screen"
+```
+
+---
+
+## Task 11: Create Home Screen Placeholder
+
+**Files:**
+- Create: `frontend/lib/presentation/screens/home/home_screen.dart`
+
+**Step 1: Create home screen**
+
+Create `frontend/lib/presentation/screens/home/home_screen.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/auth_provider.dart';
+
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ScreenBuddies'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => ref.read(authProvider.notifier).logout(),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Welcome, ${user?.displayName ?? user?.email ?? 'User'}!',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+            if (user?.emailVerified == false)
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Please verify your email to create elections.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            const SizedBox(height: 32),
+            const Text('Your elections will appear here.'),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          // TODO: Navigate to create election
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('New Election'),
+      ),
+    );
+  }
+}
+```
+
+**Step 2: Commit**
+
+```bash
+git add .
+git commit -m "feat: add home screen placeholder"
+```
+
+---
+
+## Task 12: Create Main App Entry
+
+**Files:**
+- Modify: `frontend/lib/main.dart`
+- Create: `frontend/lib/app.dart`
+
+**Step 1: Create app widget**
+
+Create `frontend/lib/app.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/theme/app_theme.dart';
+import 'presentation/router/app_router.dart';
+
+class ScreenBuddiesApp extends ConsumerWidget {
+  const ScreenBuddiesApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+
+    return MaterialApp.router(
+      title: 'ScreenBuddies',
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
+      routerConfig: router,
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
+```
+
+**Step 2: Update main.dart**
+
+Replace `frontend/lib/main.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'app.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    const ProviderScope(
+      child: ScreenBuddiesApp(),
+    ),
+  );
+}
+```
+
+**Step 3: Run app to verify**
+
+```bash
+cd frontend && flutter run -d chrome
+```
+Expected: App runs, shows splash, redirects to login
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "feat: connect app entry point"
+```
+
+---
+
+## Task 13: Create Localization Files
+
+**Files:**
+- Create: `frontend/lib/l10n/app_en.arb`
+- Create: `frontend/lib/l10n/app_fr.arb`
+
+**Step 1: Create English translations**
+
+Create `frontend/lib/l10n/app_en.arb`:
+```json
+{
+  "@@locale": "en",
+  "appTitle": "ScreenBuddies",
+  "login": "Sign In",
+  "register": "Sign Up",
+  "email": "Email",
+  "password": "Password",
+  "confirmPassword": "Confirm Password",
+  "displayName": "Display Name",
+  "welcome": "Welcome",
+  "welcomeBack": "Welcome Back",
+  "createAccount": "Create Account",
+  "signInToContinue": "Sign in to continue",
+  "signUpToGetStarted": "Sign up to get started",
+  "dontHaveAccount": "Don't have an account?",
+  "alreadyHaveAccount": "Already have an account?",
+  "logout": "Logout",
+  "elections": "Elections",
+  "newElection": "New Election",
+  "verifyEmailMessage": "Please verify your email to create elections."
+}
+```
+
+**Step 2: Create French translations**
+
+Create `frontend/lib/l10n/app_fr.arb`:
+```json
+{
+  "@@locale": "fr",
+  "appTitle": "ScreenBuddies",
+  "login": "Connexion",
+  "register": "Inscription",
+  "email": "Email",
+  "password": "Mot de passe",
+  "confirmPassword": "Confirmer le mot de passe",
+  "displayName": "Nom d'affichage",
+  "welcome": "Bienvenue",
+  "welcomeBack": "Bon retour",
+  "createAccount": "Créer un compte",
+  "signInToContinue": "Connectez-vous pour continuer",
+  "signUpToGetStarted": "Inscrivez-vous pour commencer",
+  "dontHaveAccount": "Vous n'avez pas de compte ?",
+  "alreadyHaveAccount": "Vous avez déjà un compte ?",
+  "logout": "Déconnexion",
+  "elections": "Élections",
+  "newElection": "Nouvelle élection",
+  "verifyEmailMessage": "Veuillez vérifier votre email pour créer des élections."
+}
+```
+
+**Step 3: Generate localization**
+
+```bash
+flutter gen-l10n
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "feat: add i18n with English and French"
+```
+
+---
+
+## Task 14: Final Commit
+
+**Step 1: Run app to verify**
+
+```bash
+flutter run -d chrome
+```
+Expected: Full auth flow works (login, register, logout)
+
+**Step 2: Final commit**
+
+```bash
+git add .
+git commit -m "chore: phase 5 complete - flutter foundation"
+```
+
+---
+
+## Phase 5 Completion Checklist
+
+- [ ] Flutter project created
+- [ ] Dependencies installed (Riverpod, GoRouter, Dio)
+- [ ] Directory structure created
+- [ ] Theme system (colors, typography, themes)
+- [ ] API client with Dio and interceptors
+- [ ] Secure storage for tokens
+- [ ] Auth provider with login/register/logout
+- [ ] GoRouter with auth redirects
+- [ ] Splash screen
+- [ ] Login screen
+- [ ] Register screen
+- [ ] Home screen placeholder
+- [ ] Localization (EN/FR)
+- [ ] App runs and auth flow works
