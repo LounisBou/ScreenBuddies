@@ -463,8 +463,10 @@ class ApiClient {
 │  │                             │   │
 │  └─────────────────────────────┘   │
 │                                     │
+│          [ Skip this duel ]         │ ← Skip button
+│                                     │
 └─────────────────────────────────────┘
-        Tap a card to choose
+   Tap a card to choose, or skip
 ```
 
 ---
@@ -480,6 +482,8 @@ class ApiClient {
   "election_status_voting": "Voting",
   "election_status_ended": "Ended",
   "duel_choose_favorite": "Choose your favorite",
+  "duel_skip": "Skip this duel",
+  "duel_skip_hint": "Don't know either? Skip it.",
   "duel_progress": "{completed} of {total} duels",
   "@duel_progress": {
     "placeholders": {

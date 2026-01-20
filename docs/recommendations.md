@@ -20,6 +20,7 @@ This document contains recommendations for improving the ScreenBuddies specifica
 
 ## Review Process
 
+**MANDATORY: Always start by explaining is detail the recommandation**
 **MANDATORY: After each recommendation is accepted or modified:**
 
 1. **Check all docs for collateral damage** - Search for affected terms/patterns
@@ -27,8 +28,9 @@ This document contains recommendations for improving the ScreenBuddies specifica
 3. **Update all plan files** (phase-1 through phase-6+)
 4. **Update this document** with decision and notes
 5. **Verify consistency** across all documentation
+6. **Verify consistency AGAIN** Make a second pass of verification across all documentation
 
-**Do NOT proceed to next recommendation until collateral damage is fixed.**
+**Do NOT proceed to next recommendation until ALL collateral damages are fixed.**
 
 ---
 
@@ -126,7 +128,7 @@ Add a **"Skip" button** to the duel screen.
 - Store skipped duels as `null` in JSON: `{"1_2": null, "1_3": 3}`
 - Don't count skipped pairs toward rankings
 - Track skip count separately for analytics
-- Optionally: limit skips per election (e.g., max 20% of duels)
+- No limit on skips (trust users)
 
 **Benefits:**
 - Cleaner ranking data (only informed choices)
@@ -134,7 +136,7 @@ Add a **"Skip" button** to the duel screen.
 - Can analyze which candidates are frequently skipped
 
 **Trade-offs:**
-- Users might skip too much (mitigate with limit)
+- Users might skip too much (accepted risk - no limit)
 - Slightly more complex UI
 - Algorithm must handle pairs with fewer votes
 
@@ -142,10 +144,13 @@ Add a **"Skip" button** to the duel screen.
 - Affects: Phase 4 (voting), Phase 6 (Flutter duel screen)
 - Effort: Low-Medium
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [x] Accept  [ ] Reject  [ ] Modify
 
 **Notes:**
-_To be filled during review_
+- Accepted on 2026-01-20
+- No skip limit - trust users to make informed decisions
+- Skipped duels stored as `null` in votes JSON
+- Algorithm ignores skipped pairs in ranking calculations
 
 ---
 
@@ -604,4 +609,5 @@ _To be filled during review_
 |------|----------------|----------|-------|
 | 2026-01-20 | R1: Switch to Sanctum | **Accepted** | Redis cache for future scaling if needed |
 | 2026-01-20 | R2: Commit to PostgreSQL | **Accepted** | Better JSON/jsonb support, GIN indexes |
+| 2026-01-20 | R3: Add Skip to Duels | **Accepted** | No skip limit, store as null in JSON |
 

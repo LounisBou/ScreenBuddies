@@ -778,6 +778,14 @@ class VotingNotifier extends StateNotifier<VotingState> {
   }
 
   Future<void> vote(int winnerId) async {
+    await _submitVote(winnerId);
+  }
+
+  Future<void> skip() async {
+    await _submitVote(null);
+  }
+
+  Future<void> _submitVote(int? winnerId) async {
     final duel = state.currentDuel;
     if (duel == null) return;
 
@@ -786,11 +794,11 @@ class VotingNotifier extends StateNotifier<VotingState> {
     try {
       final apiClient = _ref.read(apiClientProvider);
       final response = await apiClient.post<Map<String, dynamic>>(
-        '/elections/$_electionUuid/vote',  // Updated endpoint
+        '/elections/$_electionUuid/vote',
         data: {
           'candidate_a_id': duel.candidateA.id,
           'candidate_b_id': duel.candidateB.id,
-          'winner_id': winnerId,
+          'winner_id': winnerId,  // null for skip
         },
       );
 
@@ -1503,6 +1511,16 @@ class _DuelScreenState extends ConsumerState<DuelScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          // Skip button
+          TextButton.icon(
+            onPressed: state.isVoting ? null : _skip,
+            icon: const Icon(Icons.skip_next),
+            label: const Text("Don't know either? Skip"),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -1518,6 +1536,10 @@ class _DuelScreenState extends ConsumerState<DuelScreen> {
         _selectedId = null;
       });
     });
+  }
+
+  void _skip() {
+    ref.read(votingProvider(widget.electionUuid).notifier).skip();
   }
 }
 ```

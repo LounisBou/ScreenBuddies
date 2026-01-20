@@ -240,28 +240,28 @@ class DuelGeneratorService
      *
      * @param int $candidateA Candidate A ID
      * @param int $candidateB Candidate B ID
-     * @param int $winnerId The chosen winner
+     * @param int|null $winnerId The chosen winner, or null if skipped
      */
-    public function recordVote(Voter $voter, int $candidateA, int $candidateB, int $winnerId): void
+    public function recordVote(Voter $voter, int $candidateA, int $candidateB, ?int $winnerId): void
     {
         $pairKey = $this->normalizePairKey($candidateA, $candidateB);
 
         $votes = $voter->votes ?? [];
-        $votes[$pairKey] = $winnerId;
+        $votes[$pairKey] = $winnerId;  // null for skipped duels
 
         $voter->update([
             'votes' => $votes,
-            'duel_count' => count($votes),
+            'duel_count' => count(array_filter($votes, fn($v) => $v !== null)),  // Only count actual votes
         ]);
     }
 
     /**
-     * Check if a pair has already been voted on
+     * Check if a pair has already been voted on or skipped
      */
     public function hasVoted(Voter $voter, int $candidateA, int $candidateB): bool
     {
         $pairKey = $this->normalizePairKey($candidateA, $candidateB);
-        return isset($voter->votes[$pairKey]);
+        return array_key_exists($pairKey, $voter->votes ?? []);  // isset won't work for null values
     }
 
     /**
@@ -511,7 +511,7 @@ class CastVoteRequest extends FormRequest
         return [
             'candidate_a_id' => ['required', 'integer'],
             'candidate_b_id' => ['required', 'integer', 'different:candidate_a_id'],
-            'winner_id' => ['required', 'integer'],
+            'winner_id' => ['nullable', 'integer'],  // null = skip
         ];
     }
 }
@@ -597,8 +597,9 @@ class VotingController extends Controller
             ->where('election_id', $election->id)
             ->firstOrFail();
 
-        // Validate winner is one of the candidates
-        if (!in_array($request->winner_id, [$candidateA->id, $candidateB->id])) {
+        // Validate winner is one of the candidates (or null for skip)
+        $isSkip = $request->winner_id === null;
+        if (!$isSkip && !in_array($request->winner_id, [$candidateA->id, $candidateB->id])) {
             throw new ApiException(
                 'INVALID_WINNER',
                 'Winner must be one of the candidates.',
@@ -606,7 +607,7 @@ class VotingController extends Controller
             );
         }
 
-        // Check if already voted on this pair
+        // Check if already voted/skipped on this pair
         if ($this->duelGeneratorService->hasVoted($voter, $candidateA->id, $candidateB->id)) {
             throw new ApiException(
                 'PAIR_ALREADY_VOTED',
@@ -615,12 +616,12 @@ class VotingController extends Controller
             );
         }
 
-        // Record vote in JSON
+        // Record vote or skip in JSON (null = skip)
         $this->duelGeneratorService->recordVote(
             $voter,
             $candidateA->id,
             $candidateB->id,
-            $request->winner_id
+            $request->winner_id  // null for skip
         );
 
         // Get next duel
@@ -635,7 +636,8 @@ class VotingController extends Controller
 
         return response()->json([
             'data' => [
-                'voted' => true,
+                'voted' => !$isSkip,
+                'skipped' => $isSkip,
                 'next_duel' => $nextDuel ? [
                     'candidate_a' => new CandidateResource($nextDuel['candidate_a']),
                     'candidate_b' => new CandidateResource($nextDuel['candidate_b']),

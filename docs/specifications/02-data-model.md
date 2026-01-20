@@ -218,21 +218,23 @@ A user participating in an election. Stores all duel votes as compact JSON.
 
 **Votes JSON Structure:**
 
-Stores duel results as key-value pairs where key is `{smaller_id}_{larger_id}` and value is the winner's candidate ID.
+Stores duel results as key-value pairs where key is `{smaller_id}_{larger_id}` and value is the winner's candidate ID or `null` for skipped duels.
 
 ```json
 {
-  "1_2": 1,    // Candidate 1 vs 2 → winner is 1
-  "1_3": 3,    // Candidate 1 vs 3 → winner is 3
-  "2_3": 2,    // Candidate 2 vs 3 → winner is 2
+  "1_2": 1,      // Candidate 1 vs 2 → winner is 1
+  "1_3": 3,      // Candidate 1 vs 3 → winner is 3
+  "2_3": null,   // Candidate 2 vs 3 → skipped (user didn't know either)
+  "3_4": 4,      // Candidate 3 vs 4 → winner is 4
   ...
 }
 ```
 
 **Key format rules:**
 - Always use `{smaller_id}_{larger_id}` to normalize pair order
-- Value is always the winner's candidate ID
-- Missing key = duel not yet completed
+- Value is winner's candidate ID, or `null` if skipped
+- Missing key = duel not yet presented
+- Skipped duels (`null`) are ignored in ranking calculations
 
 **Scale benefit:** Instead of 435 rows per voter (for 30 candidates), stores 1 row with ~4KB JSON.
 

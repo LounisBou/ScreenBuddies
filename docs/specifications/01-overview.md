@@ -88,7 +88,7 @@ All types share identical voting behavior. Only the data source differs.
 | Minimum candidates | 2 |
 | Maximum candidates | 30 |
 | Winners (K) | 1-5, must be < candidate count |
-| Duel choice | Binary only (no skip, no tie) |
+| Duel choice | Choose winner or skip (no tie) |
 
 ---
 

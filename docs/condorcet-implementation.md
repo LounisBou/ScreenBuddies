@@ -37,12 +37,14 @@ Each voter stores all their duel votes in a compact JSON blob.
 id (PK)
 election_id (FK)
 user_id (FK)
-votes (JSON)      -- {"1_2": 1, "1_3": 3, "2_3": 2, ...}
-duel_count (int)
+votes (JSON)      -- {"1_2": 1, "1_3": null, "2_3": 2, ...}
+duel_count (int)  -- counts only actual votes (not skips)
 completed (bool)
 ```
 
-**Votes JSON format:** Key = `{smaller_id}_{larger_id}`, Value = winner's candidate ID.
+**Votes JSON format:** Key = `{smaller_id}_{larger_id}`, Value = winner's candidate ID or `null` if skipped.
+
+**Skipped duels:** When a voter doesn't know either candidate, they can skip. Skipped duels are stored as `null` and are **ignored** in ranking calculations.
 
 #### `pairwise_stats` (computed on demand)
 

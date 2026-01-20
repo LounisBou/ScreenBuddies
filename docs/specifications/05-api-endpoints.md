@@ -888,7 +888,7 @@ Get next duel for voting. Uses active selection algorithm to prioritize uncertai
 
 **Auth:** Required (voter, voting phase)
 
-Cast vote in duel. Stores result in Voter.votes JSON blob.
+Cast vote or skip duel. Stores result in Voter.votes JSON blob.
 
 **Request:**
 ```json
@@ -899,9 +899,18 @@ Cast vote in duel. Stores result in Voter.votes JSON blob.
 }
 ```
 
+Or to skip:
+```json
+{
+  "candidate_a_id": 12,
+  "candidate_b_id": 25,
+  "winner_id": null
+}
+```
+
 **Validation:**
-- winner_id must be candidate_a_id or candidate_b_id
-- Pair not already voted (checked against Voter.votes JSON)
+- winner_id must be candidate_a_id, candidate_b_id, or null (skip)
+- Pair not already voted/skipped (checked against Voter.votes JSON)
 - Election in voting status
 - candidate_a_id < candidate_b_id (normalized order)
 
@@ -910,13 +919,14 @@ Cast vote in duel. Stores result in Voter.votes JSON blob.
 {
   "data": {
     "voted": true,
+    "skipped": false,
     "next_duel": { ... } | null
   }
 }
 ```
 
 **Errors:**
-- `400 PAIR_ALREADY_VOTED` - This pair already voted on
+- `400 PAIR_ALREADY_VOTED` - This pair already voted/skipped
 - `400 ELECTION_CLOSED` - Election not in voting phase
 
 ---
