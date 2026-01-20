@@ -319,7 +319,7 @@ use App\Models\Candidate;
 use App\Models\Voter;
 use App\Models\MediaType;
 use App\Enums\ElectionStatus;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
     $this->mediaType = MediaType::create([
@@ -346,7 +346,7 @@ test('voter can get next duel', function () {
         'votes' => [],
     ]);
 
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson("/api/v1/elections/{$election->uuid}/vote/next");
@@ -378,7 +378,7 @@ test('voter can cast vote', function () {
         'votes' => [],
     ]);
 
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/elections/{$election->uuid}/vote", [
@@ -414,7 +414,7 @@ test('cannot vote on same pair twice', function () {
         'duel_count' => 1,
     ]);
 
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/elections/{$election->uuid}/vote", [
@@ -444,7 +444,7 @@ test('cannot vote on ended election', function () {
         'votes' => [],
     ]);
 
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/elections/{$election->uuid}/vote", [
@@ -1192,7 +1192,7 @@ use App\Models\Candidate;
 use App\Models\Voter;
 use App\Models\MediaType;
 use App\Enums\ElectionStatus;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
     $this->mediaType = MediaType::create([
@@ -1222,7 +1222,7 @@ test('voter can get results after election ends', function () {
         'duel_count' => 1,
     ]);
 
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson("/api/v1/elections/{$election->uuid}/results");
@@ -1253,7 +1253,7 @@ test('cannot get results while voting', function () {
         'votes' => [],
     ]);
 
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson("/api/v1/elections/{$election->uuid}/results");

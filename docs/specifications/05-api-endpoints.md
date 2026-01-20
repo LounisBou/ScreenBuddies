@@ -83,8 +83,8 @@ Create new account.
       "created_at": "2024-01-15T10:30:00Z"
     },
     "tokens": {
-      "access_token": "eyJ...",
-      "refresh_token": "eyJ...",
+      "access_token": "1|abc123...",
+      "refresh_token": "1|abc123...",
       "expires_in": 900
     }
   }
@@ -111,8 +111,8 @@ Authenticate user.
   "data": {
     "user": { ... },
     "tokens": {
-      "access_token": "eyJ...",
-      "refresh_token": "eyJ...",
+      "access_token": "1|abc123...",
+      "refresh_token": "1|abc123...",
       "expires_in": 900
     }
   }
@@ -132,7 +132,7 @@ Get new access token.
 **Request:**
 ```json
 {
-  "refresh_token": "eyJ..."
+  "refresh_token": "1|abc123..."
 }
 ```
 
@@ -140,8 +140,8 @@ Get new access token.
 ```json
 {
   "data": {
-    "access_token": "eyJ...",
-    "refresh_token": "eyJ...",
+    "access_token": "1|abc123...",
+    "refresh_token": "1|abc123...",
     "expires_in": 900
   }
 }

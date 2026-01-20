@@ -2,13 +2,13 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement complete authentication system with JWT, email verification, password reset, user profile, and friendship system.
+**Goal:** Implement complete authentication system with Laravel Sanctum, email verification, password reset, user profile, and friendship system.
 
 **Architecture:** Controller → Request validation → Service layer → Response. All auth logic in dedicated services. Form requests for validation. API Resources for consistent JSON responses.
 
-**Tech Stack:** Laravel 11, JWT, Laravel Mail, API Resources, Pest
+**Tech Stack:** Laravel 11, Laravel Sanctum, Laravel Mail, API Resources, Pest
 
-**Prerequisites:** Phase 1 complete (models, migrations, JWT configured)
+**Prerequisites:** Phase 1 complete (models, migrations, Sanctum configured)
 
 ---
 
@@ -272,7 +272,7 @@ use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\AuthResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -291,17 +291,16 @@ class AuthController extends Controller
 
         $user->load('preference');
 
-        $accessToken = JWTAuth::fromUser($user);
-        $refreshToken = JWTAuth::claims(['refresh' => true])
-            ->setTTL(config('jwt.refresh_ttl'))
-            ->fromUser($user);
+        // Create Sanctum tokens
+        $accessToken = $user->createToken('access', ['access'], now()->addMinutes(config('sanctum.expiration')))->plainTextToken;
+        $refreshToken = $user->createToken('refresh', ['refresh'], now()->addMinutes(config('sanctum.refresh_expiration')))->plainTextToken;
 
         return response()->json([
             'data' => new AuthResource(
                 $user,
                 $accessToken,
                 $refreshToken,
-                config('jwt.ttl') * 60
+                config('sanctum.expiration') * 60
             ),
         ], 201);
     }
@@ -509,7 +508,7 @@ public function login(LoginRequest $request): JsonResponse
 {
     $credentials = $request->only('email', 'password');
 
-    if (!$token = JWTAuth::attempt($credentials)) {
+    if (!auth()->attempt($credentials)) {
         throw new ApiException(
             'INVALID_CREDENTIALS',
             'Invalid email or password.',
@@ -520,7 +519,7 @@ public function login(LoginRequest $request): JsonResponse
     $user = auth()->user();
 
     if ($user->is_banned) {
-        JWTAuth::invalidate($token);
+        auth()->logout();
         throw new ApiException(
             'ACCOUNT_BANNED',
             'Your account has been banned.',
@@ -528,16 +527,16 @@ public function login(LoginRequest $request): JsonResponse
         );
     }
 
-    $refreshToken = JWTAuth::claims(['refresh' => true])
-        ->setTTL(config('jwt.refresh_ttl'))
-        ->fromUser($user);
+    // Create Sanctum tokens
+    $accessToken = $user->createToken('access', ['access'], now()->addMinutes(config('sanctum.expiration')))->plainTextToken;
+    $refreshToken = $user->createToken('refresh', ['refresh'], now()->addMinutes(config('sanctum.refresh_expiration')))->plainTextToken;
 
     return response()->json([
         'data' => new AuthResource(
             $user,
-            $token,
+            $accessToken,
             $refreshToken,
-            config('jwt.ttl') * 60
+            config('sanctum.expiration') * 60
         ),
     ]);
 }
@@ -580,13 +579,11 @@ Create `backend/tests/Feature/Auth/TokenTest.php`:
 <?php
 
 use App\Models\User;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 test('user can refresh token', function () {
     $user = User::factory()->create();
-    $refreshToken = JWTAuth::claims(['refresh' => true])
-        ->setTTL(config('jwt.refresh_ttl'))
-        ->fromUser($user);
+    $refreshToken = $user->createToken('refresh', ['refresh'], now()->addMinutes(config('sanctum.refresh_expiration')))->plainTextToken;
 
     $response = $this->postJson('/api/v1/auth/refresh', [
         'refresh_token' => $refreshToken,
@@ -604,7 +601,7 @@ test('user can refresh token', function () {
 
 test('user can logout', function () {
     $user = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson('/api/v1/auth/logout');
@@ -639,10 +636,10 @@ public function refresh(Request $request): JsonResponse
     ]);
 
     try {
-        JWTAuth::setToken($request->refresh_token);
-        $payload = JWTAuth::getPayload();
+        // Find the refresh token
+        $token = PersonalAccessToken::findToken($request->refresh_token);
 
-        if (!$payload->get('refresh')) {
+        if (!$token || !in_array('refresh', $token->abilities)) {
             throw new ApiException(
                 'INVALID_TOKEN',
                 'Invalid refresh token.',
@@ -650,21 +647,34 @@ public function refresh(Request $request): JsonResponse
             );
         }
 
-        $user = JWTAuth::authenticate();
-        JWTAuth::invalidate();
+        // Check if token is expired
+        if ($token->expires_at && $token->expires_at->isPast()) {
+            $token->delete();
+            throw new ApiException(
+                'INVALID_TOKEN',
+                'Refresh token has expired.',
+                401
+            );
+        }
 
-        $accessToken = JWTAuth::fromUser($user);
-        $refreshToken = JWTAuth::claims(['refresh' => true])
-            ->setTTL(config('jwt.refresh_ttl'))
-            ->fromUser($user);
+        $user = $token->tokenable;
+
+        // Delete old tokens
+        $token->delete();
+
+        // Create new tokens
+        $accessToken = $user->createToken('access', ['access'], now()->addMinutes(config('sanctum.expiration')))->plainTextToken;
+        $refreshToken = $user->createToken('refresh', ['refresh'], now()->addMinutes(config('sanctum.refresh_expiration')))->plainTextToken;
 
         return response()->json([
             'data' => [
                 'access_token' => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_in' => config('jwt.ttl') * 60,
+                'expires_in' => config('sanctum.expiration') * 60,
             ],
         ]);
+    } catch (ApiException $e) {
+        throw $e;
     } catch (\Exception $e) {
         throw new ApiException(
             'INVALID_TOKEN',
@@ -676,7 +686,8 @@ public function refresh(Request $request): JsonResponse
 
 public function logout(): JsonResponse
 {
-    JWTAuth::invalidate(JWTAuth::getToken());
+    // Delete current access token
+    auth()->user()->currentAccessToken()->delete();
 
     return response()->json(null, 204);
 }
@@ -695,7 +706,7 @@ Route::prefix('v1')->group(function () {
     });
 
     // Protected routes
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
     });
 });
@@ -732,11 +743,11 @@ Create `backend/tests/Feature/User/ProfileTest.php`:
 <?php
 
 use App\Models\User;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 test('user can get their profile', function () {
     $user = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson('/api/v1/me');
@@ -747,7 +758,7 @@ test('user can get their profile', function () {
 
 test('user can update their profile', function () {
     $user = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->putJson('/api/v1/me', [
@@ -763,7 +774,7 @@ test('user can update their profile', function () {
 test('user can update notification preferences', function () {
     $user = User::factory()->create();
     $user->load('preference');
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->putJson('/api/v1/me', [
@@ -865,7 +876,7 @@ Add to protected routes in `backend/routes/api.php`:
 ```php
 use App\Http\Controllers\Api\V1\UserController;
 
-// Inside middleware('auth:api') group:
+// Inside middleware('auth:sanctum') group:
 Route::get('me', [UserController::class, 'show']);
 Route::put('me', [UserController::class, 'update']);
 ```
@@ -902,13 +913,13 @@ Create `backend/tests/Feature/User/PasswordTest.php`:
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 test('user can change password', function () {
     $user = User::factory()->create([
         'password' => Hash::make('oldpassword'),
     ]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->putJson('/api/v1/me/password', [
@@ -927,7 +938,7 @@ test('password change fails with wrong current password', function () {
     $user = User::factory()->create([
         'password' => Hash::make('oldpassword'),
     ]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->putJson('/api/v1/me/password', [
@@ -1046,12 +1057,12 @@ Create `backend/tests/Feature/Friendship/FriendshipTest.php`:
 use App\Models\User;
 use App\Models\Friendship;
 use App\Enums\FriendshipStatus;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 test('user can send friend request', function () {
     $user = User::factory()->create(['email_verified_at' => now()]);
     $friend = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson('/api/v1/friends', [
@@ -1076,7 +1087,7 @@ test('user can accept friend request', function () {
         'addressee_id' => $addressee->id,
         'status' => FriendshipStatus::PENDING,
     ]);
-    $token = JWTAuth::fromUser($addressee);
+    $token = $addressee->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->putJson("/api/v1/friends/{$friendship->id}/accept");
@@ -1093,7 +1104,7 @@ test('user can list friends', function () {
         'addressee_id' => $friend->id,
         'status' => FriendshipStatus::ACCEPTED,
     ]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson('/api/v1/friends');
@@ -1105,7 +1116,7 @@ test('user can list friends', function () {
 test('unverified user cannot send friend request', function () {
     $user = User::factory()->unverified()->create();
     $friend = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson('/api/v1/friends', [
@@ -1397,7 +1408,7 @@ Add to `backend/routes/api.php`:
 ```php
 use App\Http\Controllers\Api\V1\FriendshipController;
 
-// Inside auth:api middleware, add verified middleware for friends:
+// Inside auth:sanctum middleware, add verified middleware for friends:
 Route::middleware('verified')->group(function () {
     Route::get('friends', [FriendshipController::class, 'index']);
     Route::get('friends/requests', [FriendshipController::class, 'requests']);
@@ -1440,7 +1451,7 @@ Create `backend/tests/Feature/Auth/EmailVerificationTest.php`:
 
 use App\Models\User;
 use Illuminate\Support\Facades\URL;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 test('user can verify email', function () {
     $user = User::factory()->unverified()->create();
@@ -1459,7 +1470,7 @@ test('user can verify email', function () {
 
 test('user can resend verification email', function () {
     $user = User::factory()->unverified()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson('/api/v1/auth/resend-verification');
@@ -1626,8 +1637,8 @@ git commit -m "chore: phase 2 complete - auth and user management"
 ## Phase 2 Completion Checklist
 
 - [ ] API exception handling
-- [ ] User registration with JWT
-- [ ] User login with JWT
+- [ ] User registration with Sanctum
+- [ ] User login with Sanctum
 - [ ] Token refresh
 - [ ] Logout
 - [ ] User profile (get/update)

@@ -2,13 +2,13 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Set up Laravel 11 project with database schema, models, and JWT authentication.
+**Goal:** Set up Laravel 11 project with database schema, models, and Sanctum authentication.
 
-**Architecture:** Fresh Laravel 11 API-only project with JWT auth via tymon/jwt-auth. All 8 database tables with migrations, models, and relationships. Pest for testing.
+**Architecture:** Fresh Laravel 11 API-only project with Laravel Sanctum for API token authentication. All database tables with migrations, models, and relationships. Pest for testing.
 
-**Tech Stack:** Laravel 11, PHP 8.3+, MySQL, JWT (tymon/jwt-auth), Pest
+**Tech Stack:** Laravel 11, PHP 8.3+, PostgreSQL, Laravel Sanctum, Pest
 
-**Prerequisites:** PHP 8.3+, Composer, MySQL running locally
+**Prerequisites:** PHP 8.3+, Composer, PostgreSQL running locally
 
 ---
 
@@ -38,18 +38,18 @@ Edit `backend/.env`:
 APP_NAME=ScreenBuddies
 APP_URL=http://localhost:8000
 
-DB_CONNECTION=mysql
+DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_PORT=5432
 DB_DATABASE=screenbuddies
-DB_USERNAME=root
+DB_USERNAME=postgres
 DB_PASSWORD=
 ```
 
 **Step 4: Create database**
 
 ```bash
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS screenbuddies;"
+psql -U postgres -c "CREATE DATABASE screenbuddies;"
 ```
 
 **Step 5: Commit**
@@ -63,58 +63,47 @@ git commit -m "chore: initialize Laravel 11 project"
 
 ---
 
-## Task 2: Install and Configure JWT
+## Task 2: Install and Configure Laravel Sanctum
 
 **Files:**
 - Modify: `backend/composer.json`
-- Modify: `backend/config/auth.php`
-- Create: `backend/config/jwt.php`
+- Create: `backend/config/sanctum.php`
+- Create: `backend/database/migrations/xxxx_create_personal_access_tokens_table.php`
 
-**Step 1: Install jwt-auth package**
+**Step 1: Install Sanctum package**
 
 ```bash
 cd /Users/lounis/dev/ScreenBuddies/backend
-composer require tymon/jwt-auth
+composer require laravel/sanctum
 ```
 
-**Step 2: Publish JWT config**
+**Step 2: Publish Sanctum config and migration**
 
 ```bash
-php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServiceProvider"
+php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
 ```
 
-**Step 3: Generate JWT secret**
+**Step 3: Configure token expiration**
 
-```bash
-php artisan jwt:secret
-```
-
-**Step 4: Configure auth guards**
-
-Edit `backend/config/auth.php`:
+Edit `backend/config/sanctum.php`:
 ```php
-'defaults' => [
-    'guard' => 'api',
-    'passwords' => 'users',
-],
+'expiration' => 15, // Access token expires in 15 minutes
 
-'guards' => [
-    'web' => [
-        'driver' => 'session',
-        'provider' => 'users',
-    ],
-    'api' => [
-        'driver' => 'jwt',
-        'provider' => 'users',
-    ],
-],
+// Custom: Refresh token expiration (7 days in minutes)
+'refresh_expiration' => 10080,
+```
+
+**Step 4: Run migration for personal_access_tokens table**
+
+```bash
+php artisan migrate
 ```
 
 **Step 5: Commit**
 
 ```bash
 git add .
-git commit -m "chore: install and configure JWT authentication"
+git commit -m "chore: install and configure Laravel Sanctum"
 ```
 
 ---
@@ -178,11 +167,11 @@ test('user has required fillable attributes', function () {
         ->toContain('display_name');
 });
 
-test('user has jwt methods', function () {
+test('user has Sanctum tokens trait', function () {
     $user = new User();
 
-    expect(method_exists($user, 'getJWTIdentifier'))->toBeTrue();
-    expect(method_exists($user, 'getJWTCustomClaims'))->toBeTrue();
+    expect(method_exists($user, 'tokens'))->toBeTrue();
+    expect(method_exists($user, 'createToken'))->toBeTrue();
 });
 
 test('user password is hidden', function () {
@@ -260,13 +249,14 @@ Replace `backend/app/Models/User.php`:
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Tymon\JWTAuth\Contracts\JWTSubject;
+use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable implements JWTSubject
+class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasApiTokens;
 
     protected $fillable = [
         'email',
@@ -294,16 +284,6 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasOne(UserPreference::class);
     }
-
-    public function getJWTIdentifier(): mixed
-    {
-        return $this->getKey();
-    }
-
-    public function getJWTCustomClaims(): array
-    {
-        return [];
-    }
 }
 ```
 
@@ -324,7 +304,7 @@ Expected: PASS
 
 ```bash
 git add .
-git commit -m "feat: add User model with JWT support"
+git commit -m "feat: add User model with Sanctum support"
 ```
 
 ---
@@ -1477,7 +1457,7 @@ git commit -m "chore: phase 1 complete - backend foundation"
 ## Phase 1 Completion Checklist
 
 - [ ] Laravel 11 project created
-- [ ] JWT authentication configured
+- [ ] Laravel Sanctum configured
 - [ ] Pest testing framework installed
 - [ ] All 7 migrations created and run (User, UserPreference, MediaType, Friendship, Election, Candidate, Voter)
 - [ ] All 7 models with relationships (Voter includes votes JSON for compact duel storage)

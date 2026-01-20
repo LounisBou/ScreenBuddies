@@ -12,10 +12,10 @@ RESTful API built with Laravel, using modern PHP practices and Laravel conventio
 |-----------|------------|---------|
 | Framework | Laravel | 11.x |
 | PHP | PHP | 8.3+ |
-| Database | MySQL / PostgreSQL | Latest |
+| Database | PostgreSQL | Latest |
 | Cache | Redis | Latest |
 | Queue | Redis / Database | - |
-| Auth | JWT (tymon/jwt-auth) | Latest |
+| Auth | Laravel Sanctum | Latest |
 | API Docs | Scribe or Scramble | Latest |
 | Testing | PHPUnit + Pest | Latest |
 
@@ -50,7 +50,6 @@ app/
 │   │               └── ElectionController.php
 │   │
 │   ├── Middleware/
-│   │   ├── JwtAuthenticate.php
 │   │   ├── EnsureEmailVerified.php
 │   │   ├── EnsureAdmin.php
 │   │   └── SetLocale.php
@@ -104,7 +103,7 @@ app/
 │
 └── Services/
     ├── Auth/
-    │   ├── JwtService.php
+    │   ├── TokenService.php            # Sanctum token management
     │   └── PasswordResetService.php
     │
     ├── Election/
@@ -126,7 +125,7 @@ app/
         └── PushService.php
 
 config/
-├── jwt.php
+├── sanctum.php                        # Token expiration, etc.
 ├── media.php                          # API keys, rate limits
 └── election.php                       # Business rules (limits, etc.)
 
@@ -155,26 +154,34 @@ tests/
 
 ## Authentication Flow
 
-### JWT Token Strategy
+### Sanctum Token Strategy
 
 ```
-┌─────────┐     ┌─────────┐     ┌─────────┐
-│  Login  │────►│  JWT    │────►│ Refresh │
-│         │     │ Access  │     │  Token  │
-└─────────┘     │ (15min) │     │ (7days) │
-                └─────────┘     └─────────┘
-                     │               │
-                     ▼               ▼
-              ┌─────────────────────────┐
-              │    API Requests with    │
-              │   Authorization Header  │
-              └─────────────────────────┘
+┌─────────┐     ┌─────────────┐     ┌─────────────┐
+│  Login  │────►│   Access    │────►│   Refresh   │
+│         │     │   Token     │     │   Token     │
+└─────────┘     │  (15min)    │     │  (7 days)   │
+                └─────────────┘     └─────────────┘
+                       │                   │
+                       ▼                   ▼
+                ┌─────────────────────────────┐
+                │   Stored in DB              │
+                │   (personal_access_tokens)  │
+                └─────────────────────────────┘
 ```
+
+Sanctum stores tokens in the `personal_access_tokens` table. Each token has:
+- Hashed token value
+- Token abilities (scopes)
+- Expiration timestamp
+- Last used timestamp
 
 | Token | Lifetime | Purpose |
 |-------|----------|---------|
 | Access Token | 15 minutes | API authentication |
 | Refresh Token | 7 days | Get new access token |
+
+**Note:** Sanctum doesn't have built-in refresh tokens. We implement this by issuing two tokens with different abilities and expiration times.
 
 ### Auth Endpoints
 
@@ -393,18 +400,17 @@ APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://api.screenbuddies.app
 
-# Database
-DB_CONNECTION=mysql
+# Database (PostgreSQL)
+DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_PORT=5432
 DB_DATABASE=screenbuddies
 DB_USERNAME=app
 DB_PASSWORD=secret
 
-# JWT
-JWT_SECRET=your-secret-key
-JWT_TTL=15
-JWT_REFRESH_TTL=10080
+# Sanctum
+SANCTUM_TOKEN_EXPIRATION=15
+SANCTUM_REFRESH_TOKEN_EXPIRATION=10080
 
 # Redis
 REDIS_HOST=127.0.0.1

@@ -130,6 +130,6 @@ Uses **Condorcet method with incomplete duels**:
 |-----------|------------|
 | Backend | Laravel (PHP) |
 | Frontend | Flutter (Dart) |
-| Authentication | JWT with refresh tokens |
+| Authentication | Laravel Sanctum (API tokens) |
 | Languages | English, French (i18n ready) |
 | Connectivity | Online only |

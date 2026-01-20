@@ -262,7 +262,7 @@ Never random.
 If you want next:
 
 * ✅ **Laravel service class skeleton**
-* ✅ **MySQL schema + indexes**
+* ✅ **PostgreSQL schema + indexes**
 * ✅ **Exact PHP code for cycle detection**
 * ✅ **API flow (controller → service → result)**
 

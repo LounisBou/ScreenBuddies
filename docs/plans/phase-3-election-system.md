@@ -688,7 +688,7 @@ Create `backend/tests/Feature/Media/MediaSearchTest.php`:
 
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
     Http::fake([
@@ -712,7 +712,7 @@ beforeEach(function () {
 
 test('user can search for movies', function () {
     $user = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson('/api/v1/media/search?type=movie&query=matrix');
@@ -728,7 +728,7 @@ test('user can search for movies', function () {
 
 test('search requires type parameter', function () {
     $user = User::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson('/api/v1/media/search?query=matrix');
@@ -1091,7 +1091,7 @@ use App\Models\User;
 use App\Models\MediaType;
 use App\Models\Election;
 use App\Models\Voter;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
     MediaType::create([
@@ -1103,7 +1103,7 @@ beforeEach(function () {
 
 test('verified user can create election', function () {
     $user = User::factory()->create(['email_verified_at' => now()]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson('/api/v1/elections', [
@@ -1126,7 +1126,7 @@ test('verified user can create election', function () {
 
 test('unverified user cannot create election', function () {
     $user = User::factory()->unverified()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson('/api/v1/elections', [
@@ -1147,7 +1147,7 @@ test('unverified user cannot create election', function () {
 test('user can list their elections', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create(['maestro_id' => $user->id]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson('/api/v1/elections');
@@ -1162,7 +1162,7 @@ test('maestro can close election', function () {
         'maestro_id' => $user->id,
         'status' => 'voting',
     ]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->putJson("/api/v1/elections/{$election->uuid}/close");
@@ -1531,7 +1531,7 @@ Create `backend/tests/Feature/Election/JoinElectionTest.php`:
 use App\Models\User;
 use App\Models\Election;
 use App\Models\MediaType;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
     MediaType::create([
@@ -1544,7 +1544,7 @@ beforeEach(function () {
 test('maestro can get invite link', function () {
     $user = User::factory()->create(['email_verified_at' => now()]);
     $election = Election::factory()->create(['maestro_id' => $user->id]);
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson("/api/v1/elections/{$election->uuid}/invite-link");
@@ -1557,7 +1557,7 @@ test('non-maestro cannot get invite link', function () {
     $maestro = User::factory()->create();
     $otherUser = User::factory()->create();
     $election = Election::factory()->create(['maestro_id' => $maestro->id]);
-    $token = JWTAuth::fromUser($otherUser);
+    $token = $otherUser->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson("/api/v1/elections/{$election->uuid}/invite-link");
@@ -1583,7 +1583,7 @@ test('invalid invite token returns 404', function () {
 test('authenticated user can join election via invite token', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/elections/join/{$election->invite_token}");
@@ -1599,7 +1599,7 @@ test('authenticated user can join election via invite token', function () {
 test('user cannot join same election twice', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create();
-    $token = JWTAuth::fromUser($user);
+    $token = $user->createToken('access', ['access'])->plainTextToken;
 
     // Join first time
     $this->withHeader('Authorization', "Bearer $token")
