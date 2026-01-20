@@ -96,7 +96,7 @@ All types share identical voting behavior. Only the data source differs.
 
 | Level | Capabilities |
 |-------|--------------|
-| **Unvalidated** | Vote on elections (via magic link) |
+| **Unvalidated** | Vote on elections (via invite link) |
 | **Validated** | Create elections, access archived elections, manage friends |
 | **Admin** | Manage users (ban/delete), moderate elections |
 

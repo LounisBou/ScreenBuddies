@@ -76,7 +76,7 @@ lib/
 │   │   │   ├── auth_api.dart
 │   │   │   ├── election_api.dart
 │   │   │   ├── candidate_api.dart
-│   │   │   ├── duel_api.dart
+│   │   │   ├── voting_api.dart         # GET /vote/next, POST /vote
 │   │   │   ├── user_api.dart
 │   │   │   └── media_search_api.dart
 │   │   │
@@ -86,6 +86,7 @@ lib/
 │   │
 │   ├── models/
 │   │   ├── user_model.dart
+│   │   ├── user_preference_model.dart
 │   │   ├── election_model.dart
 │   │   ├── candidate_model.dart
 │   │   ├── duel_model.dart
@@ -99,7 +100,7 @@ lib/
 │       ├── user_repository.dart
 │       ├── election_repository.dart
 │       ├── candidate_repository.dart
-│       ├── duel_repository.dart
+│       ├── voting_repository.dart
 │       ├── friendship_repository.dart
 │       └── media_search_repository.dart
 │
@@ -123,7 +124,7 @@ lib/
 │   │   ├── user_provider.dart
 │   │   ├── election_provider.dart
 │   │   ├── elections_list_provider.dart
-│   │   ├── duel_provider.dart
+│   │   ├── voting_provider.dart        # Current duel state, vote action
 │   │   ├── candidates_provider.dart
 │   │   ├── media_search_provider.dart
 │   │   ├── friendship_provider.dart
@@ -162,8 +163,8 @@ lib/
 │   │   │   │   ├── voters_tab.dart
 │   │   │   │   └── results_tab.dart
 │   │   │   │
-│   │   │   ├── invite/
-│   │   │   │   └── invite_voters_screen.dart
+│   │   │   ├── share/
+│   │   │   │   └── share_election_screen.dart
 │   │   │   │
 │   │   │   └── join/
 │   │   │       └── join_election_screen.dart
@@ -217,7 +218,7 @@ lib/
 │
 └── services/
     ├── notification_service.dart     # Push notification handling
-    ├── deep_link_service.dart        # Magic link handling
+    ├── deep_link_service.dart        # Deep link handling
     └── analytics_service.dart        # Event tracking (future)
 ```
 
@@ -247,15 +248,15 @@ Future<Election> election(ElectionRef ref, String electionId) async {
   return repository.getById(electionId);
 }
 
-// Current duel for voting
+// Current voting state (next duel to vote on)
 @riverpod
-class CurrentDuel extends _$CurrentDuel {
+class Voting extends _$Voting {
   @override
   FutureOr<Duel?> build(String electionId) async {
-    return _fetchNextDuel(electionId);
+    return _fetchNextDuel(electionId);  // Calls GET /elections/{id}/vote/next
   }
 
-  Future<void> vote(String winnerId) async { ... }
+  Future<void> vote(String winnerId) async { ... }  // Calls POST /elections/{id}/vote
 }
 
 // Elections list with filtering
@@ -279,7 +280,7 @@ class ElectionsList extends _$ElectionsList {
 | electionsListProvider | Global | User's elections |
 | electionProvider(id) | Per election | Single election details |
 | candidatesProvider(id) | Per election | Election candidates |
-| currentDuelProvider(id) | Per election | Active duel for voting |
+| votingProvider(id) | Per election | Active duel for voting |
 | mediaSearchProvider | Ephemeral | Search results |
 
 ---
@@ -317,9 +318,9 @@ final router = GoRouter(
     GoRoute(path: '/election/create', builder: (_, __) => CreateElectionScreen()),
     GoRoute(path: '/election/:id', builder: ...),
     GoRoute(path: '/election/:id/vote', builder: ...),
-    GoRoute(path: '/election/:id/invite', builder: ...),
+    GoRoute(path: '/election/:id/share', builder: ...),
 
-    // Magic link entry point
+    // Invite link entry point
     GoRoute(path: '/join/:token', builder: ...),
   ],
 );
@@ -329,7 +330,7 @@ final router = GoRouter(
 
 | URL Pattern | Action |
 |-------------|--------|
-| `/join/{token}` | Join election via magic link |
+| `/join/{token}` | Join election via invite link |
 | `/verify-email/{token}` | Verify email address |
 | `/reset-password/{token}` | Reset password |
 
@@ -408,7 +409,7 @@ class ApiClient {
        │
        ▼
 ┌──────────────┐
-│   Invite     │ Share link, invite friends
+│    Share     │ Copy/share join link
 └──────────────┘
 ```
 
@@ -538,7 +539,6 @@ class AsyncValueWidget<T> extends StatelessWidget {
 
 | Type | Action |
 |------|--------|
-| election_invitation | Open election join screen |
 | deadline_reminder | Open election detail |
 | election_ended | Open results screen |
 | friendship_request | Open friend requests |
@@ -552,13 +552,15 @@ class NotificationService {
     final targetId = message.data['target_id'];
 
     switch (type) {
-      case 'election_invitation':
-        router.go('/join/$targetId');
-        break;
       case 'election_ended':
         router.go('/election/$targetId');
         break;
-      // ...
+      case 'deadline_reminder':
+        router.go('/election/$targetId');
+        break;
+      case 'friendship_request':
+        router.go('/friends/requests');
+        break;
     }
   }
 }

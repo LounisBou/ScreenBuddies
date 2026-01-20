@@ -646,11 +646,11 @@ git commit -m "feat: add media search provider"
 
 ---
 
-## Task 4: Create Duel Provider
+## Task 4: Create Voting Provider
 
 **Files:**
 - Create: `frontend/lib/data/models/duel_model.dart`
-- Create: `frontend/lib/presentation/providers/duel_provider.dart`
+- Create: `frontend/lib/presentation/providers/voting_provider.dart`
 
 **Step 1: Create Duel model**
 
@@ -706,22 +706,22 @@ class Duel extends Equatable {
 }
 ```
 
-**Step 2: Create duel provider**
+**Step 2: Create voting provider**
 
-Create `frontend/lib/presentation/providers/duel_provider.dart`:
+Create `frontend/lib/presentation/providers/voting_provider.dart`:
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/duel_model.dart';
 import 'auth_provider.dart';
 
-class DuelState {
+class VotingState {
   final Duel? currentDuel;
   final bool isComplete;
   final bool isLoading;
   final bool isVoting;
   final String? error;
 
-  const DuelState({
+  const VotingState({
     this.currentDuel,
     this.isComplete = false,
     this.isLoading = false,
@@ -729,14 +729,14 @@ class DuelState {
     this.error,
   });
 
-  DuelState copyWith({
+  VotingState copyWith({
     Duel? currentDuel,
     bool? isComplete,
     bool? isLoading,
     bool? isVoting,
     String? error,
   }) {
-    return DuelState(
+    return VotingState(
       currentDuel: currentDuel ?? this.currentDuel,
       isComplete: isComplete ?? this.isComplete,
       isLoading: isLoading ?? this.isLoading,
@@ -746,11 +746,11 @@ class DuelState {
   }
 }
 
-class DuelNotifier extends StateNotifier<DuelState> {
+class VotingNotifier extends StateNotifier<VotingState> {
   final Ref _ref;
   final String _electionUuid;
 
-  DuelNotifier(this._ref, this._electionUuid) : super(const DuelState()) {
+  VotingNotifier(this._ref, this._electionUuid) : super(const VotingState()) {
     loadNextDuel();
   }
 
@@ -760,7 +760,7 @@ class DuelNotifier extends StateNotifier<DuelState> {
     try {
       final apiClient = _ref.read(apiClientProvider);
       final response = await apiClient.get<Map<String, dynamic>>(
-        '/elections/$_electionUuid/duels/next',
+        '/elections/$_electionUuid/vote/next',  // Updated endpoint
       );
 
       final data = response['data'];
@@ -786,7 +786,7 @@ class DuelNotifier extends StateNotifier<DuelState> {
     try {
       final apiClient = _ref.read(apiClientProvider);
       final response = await apiClient.post<Map<String, dynamic>>(
-        '/elections/$_electionUuid/duels/vote',
+        '/elections/$_electionUuid/vote',  // Updated endpoint
         data: {
           'candidate_a_id': duel.candidateA.id,
           'candidate_b_id': duel.candidateB.id,
@@ -816,9 +816,9 @@ class DuelNotifier extends StateNotifier<DuelState> {
   }
 }
 
-final duelProvider =
-    StateNotifierProvider.family<DuelNotifier, DuelState, String>((ref, uuid) {
-  return DuelNotifier(ref, uuid);
+final votingProvider =
+    StateNotifierProvider.family<VotingNotifier, VotingState, String>((ref, uuid) {
+  return VotingNotifier(ref, uuid);
 });
 ```
 
@@ -826,7 +826,7 @@ final duelProvider =
 
 ```bash
 git add .
-git commit -m "feat: add duel provider"
+git commit -m "feat: add voting provider"
 ```
 
 ---
@@ -1351,7 +1351,7 @@ Create `frontend/lib/presentation/screens/voting/duel_screen.dart`:
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../providers/duel_provider.dart';
+import '../../providers/voting_provider.dart';
 import '../../widgets/duel/duel_card.dart';
 
 class DuelScreen extends ConsumerStatefulWidget {
@@ -1368,7 +1368,7 @@ class _DuelScreenState extends ConsumerState<DuelScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final duelState = ref.watch(duelProvider(widget.electionUuid));
+    final votingState = ref.watch(votingProvider(widget.electionUuid));
 
     return Scaffold(
       appBar: AppBar(
@@ -1378,11 +1378,11 @@ class _DuelScreenState extends ConsumerState<DuelScreen> {
           onPressed: () => context.pop(),
         ),
       ),
-      body: _buildBody(context, duelState),
+      body: _buildBody(context, votingState),
     );
   }
 
-  Widget _buildBody(BuildContext context, DuelState state) {
+  Widget _buildBody(BuildContext context, VotingState state) {
     if (state.isLoading && state.currentDuel == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1425,7 +1425,7 @@ class _DuelScreenState extends ConsumerState<DuelScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => ref
-                  .read(duelProvider(widget.electionUuid).notifier)
+                  .read(votingProvider(widget.electionUuid).notifier)
                   .loadNextDuel(),
               child: const Text('Retry'),
             ),
@@ -1513,7 +1513,7 @@ class _DuelScreenState extends ConsumerState<DuelScreen> {
       _selectedId = winnerId;
     });
 
-    ref.read(duelProvider(widget.electionUuid).notifier).vote(winnerId).then((_) {
+    ref.read(votingProvider(widget.electionUuid).notifier).vote(winnerId).then((_) {
       setState(() {
         _selectedId = null;
       });
@@ -1650,10 +1650,10 @@ git commit -m "chore: phase 6 complete - flutter election features"
 
 ## Phase 6 Completion Checklist
 
-- [ ] Election models (Election, ElectionDetail, Candidate, Voter)
+- [ ] Election models (Election, ElectionDetail, Candidate, Voter, Duel)
 - [ ] Media search provider
 - [ ] Elections provider (list, create)
-- [ ] Duel provider (load, vote)
+- [ ] Voting provider (load next duel, cast vote via `/vote/next` and `/vote` endpoints)
 - [ ] Election card widget
 - [ ] Election status badge widget
 - [ ] Home screen with elections list
@@ -1677,17 +1677,17 @@ These features are scaffolded but need full implementation:
    - Full election information display
    - Candidates list
    - Voters list
-   - Actions (start voting, close, invite)
+   - Actions (start voting, close, share invite link)
 
 3. **Results Screen**
    - Winners display
    - Full ranking
    - Statistics
 
-4. **Invitation Flow**
-   - Magic link handling
-   - Deep linking
-   - Share functionality
+4. **Join Election Flow**
+   - Handle `/join/{invite_token}` deep links
+   - Share invite link functionality
+   - Join election confirmation screen
 
 5. **Notifications**
    - Firebase Cloud Messaging setup

@@ -8,18 +8,28 @@
 ├─────────────────┤       ├─────────────────┤
 │ id (PK)         │       │ id (PK)         │
 │ email           │       │ code            │
-│ password_hash   │       │ label_en        │
-│ display_name    │       │ label_fr        │
-│ avatar_url      │       │ api_source      │
-│ email_verified  │       │ is_active       │
-│ is_admin        │       │ created_at      │
-│ is_banned       │       │ updated_at      │
-│ locale          │       └────────┬────────┘
+│ password_hash   │       │ label           │
+│ display_name    │       │ api_source(ENUM)│
+│ avatar_url      │       │ is_active       │
+│ email_verified  │       │ created_at      │
+│ is_admin        │       │ updated_at      │
+│ is_banned       │       └────────┬────────┘
+│ created_at      │                │
+│ updated_at      │                │
+└────────┬────────┘                │
+         │                         │
+         ▼ 1                       │
+┌─────────────────┐                │
+│ USER_PREFERENCE │                │
+├─────────────────┤                │
+│ id (PK)         │                │
+│ user_id (FK)    │                │
+│ locale          │                │
 │ notif_email     │                │
 │ notif_push      │                │
 │ created_at      │                │
 │ updated_at      │                │
-└────────┬────────┘                │
+└─────────────────┘                │
          │                         │
          │ 1                       │ 1
          │                         │
@@ -29,11 +39,12 @@
 ├─────────────────┤       ├─────────────────┤
 │ id (PK)         │       │ id (PK)         │
 │ requester_id(FK)│       │ uuid            │
-│ addressee_id(FK)│       │ title           │
-│ status          │       │ description     │
-│ created_at      │       │ media_type_id   │◄──┘
-│ updated_at      │       │ maestro_id (FK) │◄── USER
-└─────────────────┘       │ winner_count (K)│
+│ addressee_id(FK)│       │ invite_token    │
+│ status          │       │ title           │
+│ created_at      │       │ description     │
+│ updated_at      │       │ media_type_id   │◄──┘
+└─────────────────┘       │ maestro_id (FK) │◄── USER
+                          │ winner_count (K)│
                           │ election_date   │
                           │ deadline        │
                           │ campaign_end    │
@@ -44,41 +55,24 @@
                           │ updated_at      │
                           └────────┬────────┘
                                    │
-              ┌────────────────────┼────────────────────┐
-              │                    │                    │
-              ▼ N                  ▼ N                  ▼ N
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│    CANDIDATE    │    │     VOTER       │    │   INVITATION    │
-├─────────────────┤    ├─────────────────┤    ├─────────────────┤
-│ id (PK)         │    │ id (PK)         │    │ id (PK)         │
-│ election_id(FK) │    │ election_id(FK) │    │ election_id(FK) │
-│ external_id     │    │ user_id (FK)    │    │ email           │
-│ title           │    │ joined_at       │    │ token           │
-│ poster_url      │    │ completed       │    │ sent_at         │
-│ year            │    │ created_at      │    │ accepted_at     │
-│ metadata (JSON) │    │ updated_at      │    │ created_at      │
-│ suggested_by(FK)│    └────────┬────────┘    └─────────────────┘
-│ is_approved     │             │
-│ created_at      │             │
-│ updated_at      │             │
-└────────┬────────┘             │
-         │                      │
-         │                      │
-         └──────────┬───────────┘
-                    │
-                    ▼ N
-          ┌─────────────────┐
-          │      DUEL       │
-          ├─────────────────┤
-          │ id (PK)         │
-          │ election_id(FK) │
-          │ voter_id (FK)   │
-          │ candidate_a(FK) │
-          │ candidate_b(FK) │
-          │ winner_id (FK)  │
-          │ voted_at        │
-          │ created_at      │
-          └─────────────────┘
+              ┌────────────────────┴────────────────────┐
+              │                                         │
+              ▼ N                                       ▼ N
+┌─────────────────┐                         ┌─────────────────┐
+│    CANDIDATE    │                         │     VOTER       │
+├─────────────────┤                         ├─────────────────┤
+│ id (PK)         │                         │ id (PK)         │
+│ election_id(FK) │                         │ election_id(FK) │
+│ external_id     │                         │ user_id (FK)    │
+│ title           │                         │ votes (JSON)    │
+│ poster_url      │                         │ duel_count      │
+│ year            │                         │ joined_at       │
+│ metadata (JSON) │                         │ completed       │
+│ suggested_by(FK)│                         │ created_at      │
+│ is_approved     │                         │ updated_at      │
+│ created_at      │                         └─────────────────┘
+│ updated_at      │
+└─────────────────┘
 ```
 
 ---
@@ -99,6 +93,19 @@ Registered application user.
 | email_verified_at | TIMESTAMP | NULL | Email validation timestamp |
 | is_admin | BOOLEAN | DEFAULT FALSE | Admin flag |
 | is_banned | BOOLEAN | DEFAULT FALSE | Ban status |
+| created_at | TIMESTAMP | NOT NULL | Creation date |
+| updated_at | TIMESTAMP | NOT NULL | Last update |
+
+---
+
+### USER_PREFERENCE
+
+User preferences and notification settings.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| id | BIGINT | PK, AUTO | Primary key |
+| user_id | BIGINT | FK → USER, UNIQUE | Owner user |
 | locale | VARCHAR(5) | DEFAULT 'en' | Preferred language |
 | notif_email | BOOLEAN | DEFAULT TRUE | Email notifications |
 | notif_push | BOOLEAN | DEFAULT TRUE | Push notifications |
@@ -132,9 +139,8 @@ Types of content that can be voted on.
 |-------|------|-------------|-------------|
 | id | BIGINT | PK, AUTO | Primary key |
 | code | VARCHAR(50) | UNIQUE, NOT NULL | movie, tvshow, videogame, boardgame, theater |
-| label_en | VARCHAR(100) | NOT NULL | English display name |
-| label_fr | VARCHAR(100) | NOT NULL | French display name |
-| api_source | VARCHAR(50) | NOT NULL | tmdb, rawg, bgg, custom |
+| label | VARCHAR(100) | NOT NULL | Display name (i18n key) |
+| api_source | ENUM | NOT NULL | tmdb, rawg, bgg, custom |
 | is_active | BOOLEAN | DEFAULT TRUE | Available for elections |
 | created_at | TIMESTAMP | NOT NULL | Creation date |
 | updated_at | TIMESTAMP | NOT NULL | Last update |
@@ -148,7 +154,8 @@ A voting session created by a Maestro.
 | Field | Type | Constraints | Description |
 |-------|------|-------------|-------------|
 | id | BIGINT | PK, AUTO | Primary key |
-| uuid | UUID | UNIQUE, NOT NULL | Public identifier for magic links |
+| uuid | UUID | UNIQUE, NOT NULL | Public identifier |
+| invite_token | VARCHAR(64) | UNIQUE, NOT NULL | Shareable join code |
 | title | VARCHAR(255) | NOT NULL | Election name |
 | description | TEXT | NULL | Optional description |
 | media_type_id | BIGINT | FK → MEDIA_TYPE | Type of content |
@@ -193,13 +200,15 @@ An item in an election (movie, game, etc.).
 
 ### VOTER
 
-A user participating in an election.
+A user participating in an election. Stores all duel votes as compact JSON.
 
 | Field | Type | Constraints | Description |
 |-------|------|-------------|-------------|
 | id | BIGINT | PK, AUTO | Primary key |
 | election_id | BIGINT | FK → ELECTION | Election |
 | user_id | BIGINT | FK → USER | Participating user |
+| votes | JSON | DEFAULT '{}' | Compact duel results (see below) |
+| duel_count | SMALLINT | DEFAULT 0 | Number of duels completed |
 | joined_at | TIMESTAMP | NOT NULL | When user joined |
 | completed | BOOLEAN | DEFAULT FALSE | Finished all available duels |
 | created_at | TIMESTAMP | NOT NULL | Creation date |
@@ -207,45 +216,34 @@ A user participating in an election.
 
 **Unique constraint:** (election_id, user_id)
 
----
+**Votes JSON Structure:**
 
-### INVITATION
+Stores duel results as key-value pairs where key is `{smaller_id}_{larger_id}` and value is the winner's candidate ID.
 
-Email invitation to join an election.
+```json
+{
+  "1_2": 1,    // Candidate 1 vs 2 → winner is 1
+  "1_3": 3,    // Candidate 1 vs 3 → winner is 3
+  "2_3": 2,    // Candidate 2 vs 3 → winner is 2
+  ...
+}
+```
 
-| Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
-| id | BIGINT | PK, AUTO | Primary key |
-| election_id | BIGINT | FK → ELECTION | Target election |
-| email | VARCHAR(255) | NOT NULL | Invitee email |
-| token | VARCHAR(64) | UNIQUE, NOT NULL | Magic link token |
-| sent_at | TIMESTAMP | NOT NULL | Email sent date |
-| accepted_at | TIMESTAMP | NULL | When invitation was used |
-| created_at | TIMESTAMP | NOT NULL | Creation date |
+**Key format rules:**
+- Always use `{smaller_id}_{larger_id}` to normalize pair order
+- Value is always the winner's candidate ID
+- Missing key = duel not yet completed
 
-**Unique constraint:** (election_id, email)
+**Scale benefit:** Instead of 435 rows per voter (for 30 candidates), stores 1 row with ~4KB JSON.
 
----
-
-### DUEL
-
-A pairwise comparison vote by a voter.
-
-| Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
-| id | BIGINT | PK, AUTO | Primary key |
-| election_id | BIGINT | FK → ELECTION | Election |
-| voter_id | BIGINT | FK → VOTER | Voter who made choice |
-| candidate_a_id | BIGINT | FK → CANDIDATE | First option |
-| candidate_b_id | BIGINT | FK → CANDIDATE | Second option |
-| winner_id | BIGINT | FK → CANDIDATE | Chosen candidate |
-| voted_at | TIMESTAMP | NOT NULL | When vote was cast |
-| created_at | TIMESTAMP | NOT NULL | Creation date |
-
-**Constraints:**
-- winner_id IN (candidate_a_id, candidate_b_id)
-- candidate_a_id < candidate_b_id (normalize order)
-- Unique: (voter_id, candidate_a_id, candidate_b_id)
+**Aggregation for Condorcet:**
+```sql
+-- Extract pairwise stats across all voters in an election
+SELECT
+  voter.votes->>'$.1_2' as winner_1_2
+FROM voters
+WHERE election_id = ?
+```
 
 ---
 
@@ -253,14 +251,12 @@ A pairwise comparison vote by a voter.
 
 | Relationship | Type | Description |
 |--------------|------|-------------|
+| USER → USER_PREFERENCE | 1:1 | User has one preference record |
 | USER → ELECTION | 1:N | User creates many elections (as Maestro) |
 | USER → FRIENDSHIP | N:N | Users can be friends |
 | USER → VOTER | 1:N | User participates in many elections |
 | ELECTION → CANDIDATE | 1:N | Election has 2-30 candidates |
-| ELECTION → VOTER | 1:N | Election has many voters |
-| ELECTION → INVITATION | 1:N | Election has many invitations |
-| VOTER → DUEL | 1:N | Voter makes many duel choices |
-| CANDIDATE → DUEL | 1:N | Candidate appears in many duels |
+| ELECTION → VOTER | 1:N | Election has many voters (duels stored in votes JSON) |
 | MEDIA_TYPE → ELECTION | 1:N | Media type used by many elections |
 
 ---
@@ -272,13 +268,12 @@ A pairwise comparison vote by a voter.
 CREATE INDEX idx_election_status ON election(status);
 CREATE INDEX idx_election_deadline ON election(deadline);
 CREATE INDEX idx_election_maestro ON election(maestro_id);
+CREATE UNIQUE INDEX idx_election_invite_token ON election(invite_token);
 CREATE INDEX idx_voter_election ON voter(election_id);
 CREATE INDEX idx_voter_user ON voter(user_id);
-CREATE INDEX idx_duel_voter ON duel(voter_id);
-CREATE INDEX idx_duel_election ON duel(election_id);
 CREATE INDEX idx_candidate_election ON candidate(election_id);
 CREATE INDEX idx_friendship_users ON friendship(requester_id, addressee_id);
-CREATE INDEX idx_invitation_token ON invitation(token);
+CREATE UNIQUE INDEX idx_user_preference_user ON user_preference(user_id);
 ```
 
 ---
@@ -302,3 +297,12 @@ CREATE INDEX idx_invitation_token ON invitation(token);
 | pending | Awaiting acceptance |
 | accepted | Both users are friends |
 | declined | Request was rejected |
+
+### API Source (Media Type)
+
+| Value | Description |
+|-------|-------------|
+| tmdb | The Movie Database (movies, TV shows) |
+| rawg | RAWG API (video games) |
+| bgg | BoardGameGeek (board games) |
+| custom | Manual/custom entries |

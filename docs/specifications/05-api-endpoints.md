@@ -583,6 +583,7 @@ Get election details.
     "auto_approve": false,
     "winner_count": 2,
     "is_maestro": true,
+    "invite_link": "https://app.screenbuddies.com/join/abc123...",
     "candidates": [ ... ],
     "voters": [ ... ],
     "results": null,
@@ -759,37 +760,29 @@ List election voters.
 
 ---
 
-## Invitations
+## Join Election
 
-### POST /elections/{uuid}/invitations
+### GET /elections/{uuid}/invite-link
 
 **Auth:** Required (maestro)
 
-Invite users by email or friend ID.
+Get shareable invite link for the election.
 
-**Request:**
-```json
-{
-  "emails": ["friend1@example.com", "friend2@example.com"],
-  "friend_ids": ["friend-user-uuid"]
-}
-```
-
-**Response (201):**
+**Response (200):**
 ```json
 {
   "data": {
-    "invited": 3,
-    "magic_link": "https://app.screenbuddies.com/join/abc123..."
+    "invite_link": "https://app.screenbuddies.com/join/abc123...",
+    "invite_token": "abc123..."
   }
 }
 ```
 
 ---
 
-### GET /elections/join/{token}
+### GET /elections/join/{invite_token}
 
-Get election info from magic link (no auth required).
+Get election info from join link (no auth required).
 
 **Response (200):**
 ```json
@@ -798,7 +791,10 @@ Get election info from magic link (no auth required).
     "election": {
       "uuid": "election-uuid",
       "title": "Movie Night",
-      "media_type": { ... },
+      "media_type": {
+        "code": "movie",
+        "label": "Movie"
+      },
       "maestro": {
         "display_name": "John Doe"
       },
@@ -813,53 +809,54 @@ Get election info from magic link (no auth required).
 
 ---
 
-### POST /elections/join/{token}
+### POST /elections/join/{invite_token}
 
 **Auth:** Required
 
-Join election via magic link.
-
-**Request:**
-```json
-{
-  "add_friend": true
-}
-```
+Join election via invite link.
 
 **Response (200):**
 ```json
 {
   "data": {
     "election": { ... },
-    "friendship_created": true
+    "voter": {
+      "id": "voter-uuid",
+      "joined_at": "2024-01-16T14:00:00Z"
+    }
   }
 }
 ```
 
+**Errors:**
+- `400 ALREADY_VOTER` - User is already a voter in this election
+- `400 ELECTION_NOT_JOINABLE` - Election is ended or archived
+
 ---
 
-## Duels
+## Voting (Duels)
 
-### GET /elections/{uuid}/duels/next
+Duel votes are stored compactly in the Voter's `votes` JSON field.
+
+### GET /elections/{uuid}/vote/next
 
 **Auth:** Required (voter)
 
-Get next duel for voting.
+Get next duel for voting. Uses active selection algorithm to prioritize uncertain pairs near the top-k boundary.
 
 **Response (200):**
 ```json
 {
   "data": {
-    "duel_id": "duel-uuid",
     "candidate_a": {
-      "id": "candidate-uuid",
+      "id": 12,
       "title": "The Matrix",
       "poster_url": "https://...",
       "year": 1999,
       "metadata": { ... }
     },
     "candidate_b": {
-      "id": "candidate-uuid",
+      "id": 25,
       "title": "Inception",
       "poster_url": "https://...",
       "year": 2010,
@@ -887,23 +884,26 @@ Get next duel for voting.
 
 ---
 
-### POST /elections/{uuid}/duels/{id}/vote
+### POST /elections/{uuid}/vote
 
 **Auth:** Required (voter, voting phase)
 
-Cast vote in duel.
+Cast vote in duel. Stores result in Voter.votes JSON blob.
 
 **Request:**
 ```json
 {
-  "winner_id": "candidate-uuid"
+  "candidate_a_id": 12,
+  "candidate_b_id": 25,
+  "winner_id": 12
 }
 ```
 
 **Validation:**
-- winner_id must be candidate_a or candidate_b
-- Duel not already voted
+- winner_id must be candidate_a_id or candidate_b_id
+- Pair not already voted (checked against Voter.votes JSON)
 - Election in voting status
+- candidate_a_id < candidate_b_id (normalized order)
 
 **Response (200):**
 ```json
@@ -915,26 +915,32 @@ Cast vote in duel.
 }
 ```
 
+**Errors:**
+- `400 PAIR_ALREADY_VOTED` - This pair already voted on
+- `400 ELECTION_CLOSED` - Election not in voting phase
+
 ---
 
-### GET /elections/{uuid}/duels/history
+### GET /elections/{uuid}/vote/history
 
 **Auth:** Required (voter)
 
-Get voter's past duels.
+Get voter's past duels (reconstructed from Voter.votes JSON).
 
 **Response (200):**
 ```json
 {
   "data": [
     {
-      "id": "duel-uuid",
+      "pair": "12_25",
       "candidate_a": { ... },
       "candidate_b": { ... },
-      "winner_id": "candidate-uuid",
-      "voted_at": "2024-01-16T15:30:00Z"
+      "winner_id": 12
     }
-  ]
+  ],
+  "meta": {
+    "total": 45
+  }
 }
 ```
 

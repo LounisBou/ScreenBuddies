@@ -214,9 +214,9 @@ class UserResource extends JsonResource
             'display_name' => $this->display_name,
             'avatar_url' => $this->avatar_url,
             'email_verified' => $this->email_verified_at !== null,
-            'locale' => $this->locale,
-            'notif_email' => $this->notif_email,
-            'notif_push' => $this->notif_push,
+            'locale' => $this->preference?->locale ?? 'en',
+            'notif_email' => $this->preference?->notif_email ?? true,
+            'notif_push' => $this->preference?->notif_push ?? true,
             'created_at' => $this->created_at->toIso8601String(),
         ];
     }
@@ -282,8 +282,14 @@ class AuthController extends Controller
             'email' => $request->email,
             'password' => $request->password,
             'display_name' => $request->display_name,
+        ]);
+
+        // Create user preferences
+        $user->preference()->create([
             'locale' => $request->locale ?? 'en',
         ]);
+
+        $user->load('preference');
 
         $accessToken = JWTAuth::fromUser($user);
         $refreshToken = JWTAuth::claims(['refresh' => true])
@@ -326,11 +332,19 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'is_admin' => false,
             'is_banned' => false,
-            'locale' => 'en',
-            'notif_email' => true,
-            'notif_push' => true,
             'remember_token' => Str::random(10),
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user) {
+            $user->preference()->create([
+                'locale' => 'en',
+                'notif_email' => true,
+                'notif_push' => true,
+            ]);
+        });
     }
 
     public function unverified(): static
@@ -747,7 +761,8 @@ test('user can update their profile', function () {
 });
 
 test('user can update notification preferences', function () {
-    $user = User::factory()->create(['notif_email' => true]);
+    $user = User::factory()->create();
+    $user->load('preference');
     $token = JWTAuth::fromUser($user);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
@@ -813,8 +828,11 @@ class UserController extends Controller
 {
     public function show(): JsonResponse
     {
+        $user = auth()->user();
+        $user->load('preference');
+
         return response()->json([
-            'data' => new UserResource(auth()->user()),
+            'data' => new UserResource($user),
         ]);
     }
 
@@ -822,15 +840,20 @@ class UserController extends Controller
     {
         $user = auth()->user();
 
-        $user->update($request->only([
-            'display_name',
-            'locale',
-            'notif_email',
-            'notif_push',
-        ]));
+        // Update user fields
+        $user->update($request->only(['display_name']));
+
+        // Update preference fields
+        $preferenceData = $request->only(['locale', 'notif_email', 'notif_push']);
+        if (!empty($preferenceData)) {
+            $user->preference()->updateOrCreate(
+                ['user_id' => $user->id],
+                $preferenceData
+            );
+        }
 
         return response()->json([
-            'data' => new UserResource($user->fresh()),
+            'data' => new UserResource($user->fresh()->load('preference')),
         ]);
     }
 }

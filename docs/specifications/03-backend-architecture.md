@@ -43,8 +43,7 @@ app/
 │   │           ├── ElectionController.php
 │   │           ├── CandidateController.php
 │   │           ├── VoterController.php
-│   │           ├── DuelController.php
-│   │           ├── InvitationController.php
+│   │           ├── VotingController.php      # Handles duel voting (stored in Voter.votes JSON)
 │   │           ├── MediaSearchController.php
 │   │           └── Admin/
 │   │               ├── UserController.php
@@ -62,36 +61,33 @@ app/
 │   │   │   ├── LoginRequest.php
 │   │   │   └── ResetPasswordRequest.php
 │   │   ├── Election/
-│   │   │   ├── CreateElectionRequest.php
-│   │   │   └── InviteVoterRequest.php
+│   │   │   └── CreateElectionRequest.php
 │   │   ├── Candidate/
 │   │   │   └── SuggestCandidateRequest.php
-│   │   └── Duel/
-│   │       └── VoteRequest.php
+│   │   └── Voting/
+│   │       └── CastVoteRequest.php
 │   │
 │   └── Resources/
 │       ├── UserResource.php
 │       ├── ElectionResource.php
 │       ├── ElectionDetailResource.php
 │       ├── CandidateResource.php
-│       ├── DuelResource.php
 │       ├── VoterResource.php
+│       ├── NextDuelResource.php          # Response for next duel to vote on
 │       └── FriendshipResource.php
 │
 ├── Models/
 │   ├── User.php
+│   ├── UserPreference.php
 │   ├── Friendship.php
 │   ├── MediaType.php
 │   ├── Election.php
 │   ├── Candidate.php
-│   ├── Voter.php
-│   ├── Invitation.php
-│   └── Duel.php
+│   └── Voter.php              # Contains votes JSON for compact duel storage
 │
 ├── Notifications/
 │   ├── EmailVerification.php
 │   ├── PasswordReset.php
-│   ├── ElectionInvitation.php
 │   ├── DeadlineReminder.php
 │   ├── ElectionEnded.php
 │   └── FriendshipRequest.php
@@ -148,7 +144,7 @@ tests/
 ├── Feature/
 │   ├── Auth/
 │   ├── Election/
-│   ├── Duel/
+│   ├── Voting/
 │   └── Admin/
 └── Unit/
     ├── Services/
@@ -203,8 +199,8 @@ tests/
 - `view`: Voter in election OR Maestro
 - `update`: Never (election locked after creation)
 - `delete`: Admin only
-- `invite`: Maestro only
 - `close`: Maestro only
+- `getInviteLink`: Maestro only
 
 **CandidatePolicy:**
 - `suggest`: Voter, election allows suggestions, campaign phase active
@@ -245,19 +241,21 @@ class MediaItem
 
 ### CondorcetService
 
-Calculates rankings from duel results.
+Calculates rankings from duel results using Ranked Pairs algorithm.
+Aggregates votes from all `Voter.votes` JSON blobs in the election.
 
 ```php
 class CondorcetService
 {
     /**
-     * Build preference graph from duels
+     * Build preference graph by aggregating all voters' JSON votes.
      * @return array<int, array<int, int>> [candidateA][candidateB] = win count
      */
     public function buildPreferenceGraph(Election $election): array;
 
     /**
-     * Calculate rankings using Condorcet with incomplete data
+     * Calculate rankings using Ranked Pairs with confidence-weighting.
+     * See docs/condorcet-implementation.md for algorithm details.
      * @return Collection<Candidate> Ordered by preference
      */
     public function calculateRankings(Election $election): Collection;
@@ -266,24 +264,33 @@ class CondorcetService
      * Get top K winners
      */
     public function getWinners(Election $election): Collection;
+
+    /**
+     * Compute pairwise stats from all voters
+     * @return array{wins_ij: int, wins_ji: int, total: int}[]
+     */
+    public function computePairwiseStats(Election $election): array;
 }
 ```
 
 ### DuelGeneratorService
 
-Generates optimal duels for voters.
+Generates optimal duels for voters. Reads completed pairs from `Voter.votes` JSON.
 
 ```php
 class DuelGeneratorService
 {
     /**
-     * Get next duel for voter (random pair not yet voted)
+     * Get next duel for voter using active selection algorithm.
+     * Checks Voter.votes JSON to find unvoted pairs.
+     * Prioritizes pairs near the top-k boundary (see Condorcet doc).
      * @return ?array{candidate_a: Candidate, candidate_b: Candidate}
      */
     public function getNextDuel(Voter $voter): ?array;
 
     /**
      * Check if voter has completed all possible duels
+     * (or stopping condition reached per Condorcet algorithm)
      */
     public function isComplete(Voter $voter): bool;
 
@@ -292,6 +299,14 @@ class DuelGeneratorService
      * @return array{completed: int, total: int, percentage: float}
      */
     public function getProgress(Voter $voter): array;
+
+    /**
+     * Record a vote in the voter's JSON blob
+     * @param int $candidateA Smaller candidate ID
+     * @param int $candidateB Larger candidate ID
+     * @param int $winnerId The chosen winner
+     */
+    public function recordVote(Voter $voter, int $candidateA, int $candidateB, int $winnerId): void;
 }
 ```
 
@@ -311,7 +326,6 @@ class DuelGeneratorService
 
 | Job | Queue | Description |
 |-----|-------|-------------|
-| `SendElectionInvitation` | emails | Send invitation email |
 | `SendDeadlineReminder` | emails | Send reminder notification |
 | `SendElectionResults` | emails | Send results when election ends |
 | `ProcessPushNotification` | notifications | Send push via FCM |
@@ -354,7 +368,7 @@ class DuelGeneratorService
 | FORBIDDEN | 403 | Action not allowed |
 | NOT_FOUND | 404 | Resource not found |
 | ELECTION_CLOSED | 400 | Election not in voting phase |
-| DUEL_ALREADY_VOTED | 400 | Duel already completed |
+| PAIR_ALREADY_VOTED | 400 | This pair already voted on |
 | CANDIDATE_LIMIT_REACHED | 400 | Max 30 candidates |
 | EMAIL_NOT_VERIFIED | 403 | Action requires verified email |
 

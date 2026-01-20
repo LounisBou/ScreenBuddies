@@ -2,13 +2,24 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement duel voting system, Condorcet ranking algorithm, results display, and scheduled commands for election lifecycle management.
+**Goal:** Implement duel voting system, Condorcet ranking algorithm (Ranked Pairs), results display, and scheduled commands for election lifecycle management.
 
-**Architecture:** DuelGeneratorService creates random pairs for voters. CondorcetService builds preference graph and calculates rankings. Scheduled commands handle deadline enforcement and archiving.
+**Architecture:**
+- **Compact Storage:** Votes are stored as JSON blob in `Voter.votes` field (not separate Duel rows)
+- **DuelGeneratorService:** Generates next pair for voter, reads completed pairs from JSON
+- **CondorcetService:** Aggregates from all Voter.votes JSON, implements Ranked Pairs with confidence-weighting
+- **VotingController:** Writes votes to Voter.votes JSON
+- Scheduled commands handle deadline enforcement and archiving
+
+**Data Model:**
+```
+Voter.votes JSON format: {"1_2": 1, "1_3": 3, "2_3": 2, ...}
+Key = "{smaller_id}_{larger_id}", Value = winner's candidate ID
+```
 
 **Tech Stack:** Laravel 11, Laravel Scheduler, Pest
 
-**Prerequisites:** Phase 3 complete (elections, candidates, invitations)
+**Prerequisites:** Phase 3 complete (elections, candidates, join system)
 
 ---
 
@@ -28,15 +39,13 @@ use App\Models\User;
 use App\Models\Election;
 use App\Models\Candidate;
 use App\Models\Voter;
-use App\Models\Duel;
 use App\Models\MediaType;
 use App\Services\Election\DuelGeneratorService;
 
 beforeEach(function () {
     $this->mediaType = MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
@@ -49,7 +58,12 @@ test('generates next duel for voter', function () {
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
     $c3 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:3', 'title' => 'Movie 3']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
+    $voter = Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+    ]);
 
     $service = new DuelGeneratorService();
     $duel = $service->getNextDuel($voter);
@@ -66,16 +80,13 @@ test('returns null when all duels completed', function () {
     $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
-
-    // Create the only possible duel
-    Duel::create([
+    // Create voter with completed vote in JSON
+    $voter = Voter::create([
         'election_id' => $election->id,
-        'voter_id' => $voter->id,
-        'candidate_a_id' => $c1->id,
-        'candidate_b_id' => $c2->id,
-        'winner_id' => $c1->id,
-        'voted_at' => now(),
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],  // Only pair already voted
+        'duel_count' => 1,
     ]);
 
     $service = new DuelGeneratorService();
@@ -92,7 +103,13 @@ test('calculates progress correctly', function () {
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
     $c3 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:3', 'title' => 'Movie 3']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
+    $voter = Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+        'duel_count' => 0,
+    ]);
 
     $service = new DuelGeneratorService();
     $progress = $service->getProgress($voter);
@@ -100,6 +117,30 @@ test('calculates progress correctly', function () {
     expect($progress['completed'])->toBe(0);
     expect($progress['total'])->toBe(3); // 3 candidates = 3 pairs
     expect($progress['percentage'])->toBe(0.0);
+});
+
+test('records vote in voter JSON', function () {
+    $user = User::factory()->create();
+    $election = Election::factory()->create(['media_type_id' => $this->mediaType->id]);
+
+    $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
+    $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
+
+    $voter = Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+        'duel_count' => 0,
+    ]);
+
+    $service = new DuelGeneratorService();
+    $service->recordVote($voter, $c1->id, $c2->id, $c1->id);
+
+    $voter->refresh();
+    expect($voter->votes)->toHaveKey("{$c1->id}_{$c2->id}");
+    expect($voter->votes["{$c1->id}_{$c2->id}"])->toBe($c1->id);
+    expect($voter->duel_count)->toBe(1);
 });
 ```
 
@@ -119,14 +160,14 @@ Create `backend/app/Services/Election/DuelGeneratorService.php`:
 namespace App\Services\Election;
 
 use App\Models\Candidate;
-use App\Models\Duel;
 use App\Models\Voter;
-use Illuminate\Support\Facades\DB;
 
 class DuelGeneratorService
 {
     /**
-     * Get the next duel for a voter (random unvoted pair)
+     * Get the next duel for a voter.
+     * Reads completed pairs from Voter.votes JSON.
+     * Uses simple random selection (advanced active selection can be added later).
      */
     public function getNextDuel(Voter $voter): ?array
     {
@@ -140,20 +181,16 @@ class DuelGeneratorService
             return null;
         }
 
-        // Get all voted pairs for this voter
-        $votedPairs = Duel::where('voter_id', $voter->id)
-            ->select('candidate_a_id', 'candidate_b_id')
-            ->get()
-            ->map(fn ($d) => $this->normalizePair($d->candidate_a_id, $d->candidate_b_id))
-            ->toArray();
+        // Get voted pairs from JSON
+        $votedPairs = array_keys($voter->votes ?? []);
 
-        // Generate all possible pairs
-        $allPairs = [];
+        // Generate all possible pairs and find unvoted ones
+        $unvotedPairs = [];
         for ($i = 0; $i < $candidates->count(); $i++) {
             for ($j = $i + 1; $j < $candidates->count(); $j++) {
-                $pair = $this->normalizePair($candidates[$i]->id, $candidates[$j]->id);
-                if (!in_array($pair, $votedPairs)) {
-                    $allPairs[] = [
+                $pairKey = $this->normalizePairKey($candidates[$i]->id, $candidates[$j]->id);
+                if (!in_array($pairKey, $votedPairs)) {
+                    $unvotedPairs[] = [
                         'candidate_a' => $candidates[$i],
                         'candidate_b' => $candidates[$j],
                     ];
@@ -161,12 +198,12 @@ class DuelGeneratorService
             }
         }
 
-        if (empty($allPairs)) {
+        if (empty($unvotedPairs)) {
             return null;
         }
 
-        // Return random unvoted pair
-        return $allPairs[array_rand($allPairs)];
+        // Return random unvoted pair (TODO: implement active selection)
+        return $unvotedPairs[array_rand($unvotedPairs)];
     }
 
     /**
@@ -187,7 +224,7 @@ class DuelGeneratorService
             ->count();
 
         $totalPairs = $this->calculateTotalPairs($candidateCount);
-        $completedPairs = Duel::where('voter_id', $voter->id)->count();
+        $completedPairs = $voter->duel_count;
 
         $percentage = $totalPairs > 0 ? round(($completedPairs / $totalPairs) * 100, 1) : 0;
 
@@ -199,6 +236,35 @@ class DuelGeneratorService
     }
 
     /**
+     * Record a vote in the voter's JSON blob
+     *
+     * @param int $candidateA Candidate A ID
+     * @param int $candidateB Candidate B ID
+     * @param int $winnerId The chosen winner
+     */
+    public function recordVote(Voter $voter, int $candidateA, int $candidateB, int $winnerId): void
+    {
+        $pairKey = $this->normalizePairKey($candidateA, $candidateB);
+
+        $votes = $voter->votes ?? [];
+        $votes[$pairKey] = $winnerId;
+
+        $voter->update([
+            'votes' => $votes,
+            'duel_count' => count($votes),
+        ]);
+    }
+
+    /**
+     * Check if a pair has already been voted on
+     */
+    public function hasVoted(Voter $voter, int $candidateA, int $candidateB): bool
+    {
+        $pairKey = $this->normalizePairKey($candidateA, $candidateB);
+        return isset($voter->votes[$pairKey]);
+    }
+
+    /**
      * Calculate total number of pairs: n*(n-1)/2
      */
     private function calculateTotalPairs(int $n): int
@@ -207,11 +273,11 @@ class DuelGeneratorService
     }
 
     /**
-     * Normalize pair to always have smaller ID first
+     * Normalize pair key to always have smaller ID first
      */
-    private function normalizePair(int $a, int $b): string
+    private function normalizePairKey(int $a, int $b): string
     {
-        return min($a, $b) . '-' . max($a, $b);
+        return min($a, $b) . '_' . max($a, $b);
     }
 }
 ```
@@ -227,22 +293,23 @@ Expected: PASS
 
 ```bash
 git add .
-git commit -m "feat: add DuelGeneratorService"
+git commit -m "feat: add DuelGeneratorService with JSON vote storage"
 ```
 
 ---
 
-## Task 2: Create Duel Controller
+## Task 2: Create Voting Controller
 
 **Files:**
-- Create: `backend/app/Http/Controllers/Api/V1/DuelController.php`
-- Create: `backend/app/Http/Resources/DuelResource.php`
+- Create: `backend/app/Http/Controllers/Api/V1/VotingController.php`
+- Create: `backend/app/Http/Resources/NextDuelResource.php`
+- Create: `backend/app/Http/Requests/Voting/CastVoteRequest.php`
 - Modify: `backend/routes/api.php`
-- Create: `backend/tests/Feature/Duel/DuelTest.php`
+- Create: `backend/tests/Feature/Voting/VotingTest.php`
 
-**Step 1: Write duel feature tests**
+**Step 1: Write voting feature tests**
 
-Create `backend/tests/Feature/Duel/DuelTest.php`:
+Create `backend/tests/Feature/Voting/VotingTest.php`:
 ```php
 <?php
 
@@ -257,8 +324,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 beforeEach(function () {
     $this->mediaType = MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
@@ -273,12 +339,17 @@ test('voter can get next duel', function () {
     Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+    ]);
 
     $token = JWTAuth::fromUser($user);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->getJson("/api/v1/elections/{$election->uuid}/duels/next");
+        ->getJson("/api/v1/elections/{$election->uuid}/vote/next");
 
     $response->assertStatus(200)
         ->assertJsonStructure([
@@ -290,7 +361,7 @@ test('voter can get next duel', function () {
         ]);
 });
 
-test('voter can vote on duel', function () {
+test('voter can cast vote', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create([
         'media_type_id' => $this->mediaType->id,
@@ -300,12 +371,17 @@ test('voter can vote on duel', function () {
     $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
+    $voter = Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+    ]);
 
     $token = JWTAuth::fromUser($user);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson("/api/v1/elections/{$election->uuid}/duels/vote", [
+        ->postJson("/api/v1/elections/{$election->uuid}/vote", [
             'candidate_a_id' => $c1->id,
             'candidate_b_id' => $c2->id,
             'winner_id' => $c1->id,
@@ -314,10 +390,41 @@ test('voter can vote on duel', function () {
     $response->assertStatus(200)
         ->assertJsonPath('data.voted', true);
 
-    $this->assertDatabaseHas('duels', [
-        'election_id' => $election->id,
-        'winner_id' => $c1->id,
+    // Verify vote stored in Voter.votes JSON
+    $voter->refresh();
+    expect($voter->votes)->toHaveKey("{$c1->id}_{$c2->id}");
+    expect($voter->votes["{$c1->id}_{$c2->id}"])->toBe($c1->id);
+});
+
+test('cannot vote on same pair twice', function () {
+    $user = User::factory()->create();
+    $election = Election::factory()->create([
+        'media_type_id' => $this->mediaType->id,
+        'status' => ElectionStatus::VOTING,
     ]);
+
+    $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
+    $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
+
+    $voter = Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],  // Already voted
+        'duel_count' => 1,
+    ]);
+
+    $token = JWTAuth::fromUser($user);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/elections/{$election->uuid}/vote", [
+            'candidate_a_id' => $c1->id,
+            'candidate_b_id' => $c2->id,
+            'winner_id' => $c2->id,
+        ]);
+
+    $response->assertStatus(400)
+        ->assertJsonPath('error.code', 'PAIR_ALREADY_VOTED');
 });
 
 test('cannot vote on ended election', function () {
@@ -330,32 +437,37 @@ test('cannot vote on ended election', function () {
     $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+    ]);
 
     $token = JWTAuth::fromUser($user);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson("/api/v1/elections/{$election->uuid}/duels/vote", [
+        ->postJson("/api/v1/elections/{$election->uuid}/vote", [
             'candidate_a_id' => $c1->id,
             'candidate_b_id' => $c2->id,
             'winner_id' => $c1->id,
         ]);
 
     $response->assertStatus(400)
-        ->assertJsonPath('error.code', 'ELECTION_NOT_VOTING');
+        ->assertJsonPath('error.code', 'ELECTION_CLOSED');
 });
 ```
 
 **Step 2: Run test to verify it fails**
 
 ```bash
-php artisan test tests/Feature/Duel/DuelTest.php
+php artisan test tests/Feature/Voting/VotingTest.php
 ```
 Expected: FAIL
 
-**Step 3: Create DuelResource**
+**Step 3: Create NextDuelResource**
 
-Create `backend/app/Http/Resources/DuelResource.php`:
+Create `backend/app/Http/Resources/NextDuelResource.php`:
 ```php
 <?php
 
@@ -364,24 +476,50 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class DuelResource extends JsonResource
+class NextDuelResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
-            'candidate_a' => new CandidateResource($this->candidateA),
-            'candidate_b' => new CandidateResource($this->candidateB),
-            'winner_id' => $this->winner_id,
-            'voted_at' => $this->voted_at?->toIso8601String(),
+            'candidate_a' => new CandidateResource($this->resource['candidate_a']),
+            'candidate_b' => new CandidateResource($this->resource['candidate_b']),
+            'progress' => $this->resource['progress'],
         ];
     }
 }
 ```
 
-**Step 4: Create DuelController**
+**Step 4: Create CastVoteRequest**
 
-Create `backend/app/Http/Controllers/Api/V1/DuelController.php`:
+Create `backend/app/Http/Requests/Voting/CastVoteRequest.php`:
+```php
+<?php
+
+namespace App\Http\Requests\Voting;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class CastVoteRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'candidate_a_id' => ['required', 'integer'],
+            'candidate_b_id' => ['required', 'integer', 'different:candidate_a_id'],
+            'winner_id' => ['required', 'integer'],
+        ];
+    }
+}
+```
+
+**Step 5: Create VotingController**
+
+Create `backend/app/Http/Controllers/Api/V1/VotingController.php`:
 ```php
 <?php
 
@@ -390,22 +528,23 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\ElectionStatus;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Voting\CastVoteRequest;
 use App\Http\Resources\CandidateResource;
-use App\Http\Resources\DuelResource;
 use App\Models\Candidate;
-use App\Models\Duel;
 use App\Models\Election;
 use App\Models\Voter;
 use App\Services\Election\DuelGeneratorService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
-class DuelController extends Controller
+class VotingController extends Controller
 {
     public function __construct(
         private DuelGeneratorService $duelGeneratorService
     ) {}
 
+    /**
+     * Get next duel for voting
+     */
     public function next(string $uuid): JsonResponse
     {
         $election = Election::where('uuid', $uuid)->firstOrFail();
@@ -433,19 +572,16 @@ class DuelController extends Controller
         ]);
     }
 
-    public function vote(Request $request, string $uuid): JsonResponse
+    /**
+     * Cast vote in duel (stores in Voter.votes JSON)
+     */
+    public function vote(CastVoteRequest $request, string $uuid): JsonResponse
     {
-        $request->validate([
-            'candidate_a_id' => ['required', 'integer'],
-            'candidate_b_id' => ['required', 'integer'],
-            'winner_id' => ['required', 'integer'],
-        ]);
-
         $election = Election::where('uuid', $uuid)->firstOrFail();
 
         if ($election->status !== ElectionStatus::VOTING) {
             throw new ApiException(
-                'ELECTION_NOT_VOTING',
+                'ELECTION_CLOSED',
                 'Election is not in voting phase.',
                 400
             );
@@ -470,35 +606,25 @@ class DuelController extends Controller
             );
         }
 
-        // Normalize pair order
-        $aId = min($candidateA->id, $candidateB->id);
-        $bId = max($candidateA->id, $candidateB->id);
-
-        // Check if already voted
-        $existing = Duel::where('voter_id', $voter->id)
-            ->where('candidate_a_id', $aId)
-            ->where('candidate_b_id', $bId)
-            ->first();
-
-        if ($existing) {
+        // Check if already voted on this pair
+        if ($this->duelGeneratorService->hasVoted($voter, $candidateA->id, $candidateB->id)) {
             throw new ApiException(
-                'DUEL_ALREADY_VOTED',
+                'PAIR_ALREADY_VOTED',
                 'You have already voted on this pair.',
                 400
             );
         }
 
-        // Create duel
-        Duel::create([
-            'election_id' => $election->id,
-            'voter_id' => $voter->id,
-            'candidate_a_id' => $aId,
-            'candidate_b_id' => $bId,
-            'winner_id' => $request->winner_id,
-            'voted_at' => now(),
-        ]);
+        // Record vote in JSON
+        $this->duelGeneratorService->recordVote(
+            $voter,
+            $candidateA->id,
+            $candidateB->id,
+            $request->winner_id
+        );
 
         // Get next duel
+        $voter->refresh();
         $nextDuel = $this->duelGeneratorService->getNextDuel($voter);
         $progress = $this->duelGeneratorService->getProgress($voter);
 
@@ -519,18 +645,44 @@ class DuelController extends Controller
         ]);
     }
 
+    /**
+     * Get voter's past duels (from Voter.votes JSON)
+     */
     public function history(string $uuid): JsonResponse
     {
         $election = Election::where('uuid', $uuid)->firstOrFail();
         $voter = $this->getVoter($election);
 
-        $duels = Duel::where('voter_id', $voter->id)
-            ->with(['candidateA', 'candidateB', 'winner'])
-            ->orderBy('voted_at', 'desc')
-            ->get();
+        $votes = $voter->votes ?? [];
+        $candidateIds = [];
+
+        // Collect all candidate IDs
+        foreach (array_keys($votes) as $pairKey) {
+            [$a, $b] = explode('_', $pairKey);
+            $candidateIds[] = (int) $a;
+            $candidateIds[] = (int) $b;
+        }
+
+        $candidates = Candidate::whereIn('id', array_unique($candidateIds))
+            ->get()
+            ->keyBy('id');
+
+        $history = [];
+        foreach ($votes as $pairKey => $winnerId) {
+            [$aId, $bId] = explode('_', $pairKey);
+            $history[] = [
+                'pair' => $pairKey,
+                'candidate_a' => new CandidateResource($candidates[(int) $aId] ?? null),
+                'candidate_b' => new CandidateResource($candidates[(int) $bId] ?? null),
+                'winner_id' => $winnerId,
+            ];
+        }
 
         return response()->json([
-            'data' => DuelResource::collection($duels),
+            'data' => $history,
+            'meta' => [
+                'total' => count($history),
+            ],
         ]);
     }
 
@@ -553,30 +705,30 @@ class DuelController extends Controller
 }
 ```
 
-**Step 5: Add routes**
+**Step 6: Add routes**
 
 Add to protected routes in `backend/routes/api.php`:
 ```php
-use App\Http\Controllers\Api\V1\DuelController;
+use App\Http\Controllers\Api\V1\VotingController;
 
 // Inside auth:api middleware:
-Route::get('elections/{uuid}/duels/next', [DuelController::class, 'next']);
-Route::post('elections/{uuid}/duels/vote', [DuelController::class, 'vote']);
-Route::get('elections/{uuid}/duels/history', [DuelController::class, 'history']);
+Route::get('elections/{uuid}/vote/next', [VotingController::class, 'next']);
+Route::post('elections/{uuid}/vote', [VotingController::class, 'vote']);
+Route::get('elections/{uuid}/vote/history', [VotingController::class, 'history']);
 ```
 
-**Step 6: Run tests**
+**Step 7: Run tests**
 
 ```bash
-php artisan test tests/Feature/Duel/DuelTest.php
+php artisan test tests/Feature/Voting/VotingTest.php
 ```
 Expected: PASS
 
-**Step 7: Commit**
+**Step 8: Commit**
 
 ```bash
 git add .
-git commit -m "feat: add duel voting endpoints"
+git commit -m "feat: add voting endpoints with JSON storage"
 ```
 
 ---
@@ -597,20 +749,18 @@ use App\Models\User;
 use App\Models\Election;
 use App\Models\Candidate;
 use App\Models\Voter;
-use App\Models\Duel;
 use App\Models\MediaType;
 use App\Services\Election\CondorcetService;
 
 beforeEach(function () {
     $this->mediaType = MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
 
-test('builds preference graph from duels', function () {
+test('builds preference graph from voter JSON votes', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create(['media_type_id' => $this->mediaType->id]);
 
@@ -618,22 +768,62 @@ test('builds preference graph from duels', function () {
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
     $c3 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:3', 'title' => 'Movie 3']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
-
-    // C1 beats C2, C1 beats C3, C2 beats C3
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c1->id, 'candidate_b_id' => $c2->id, 'winner_id' => $c1->id, 'voted_at' => now()]);
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c1->id, 'candidate_b_id' => $c3->id, 'winner_id' => $c1->id, 'voted_at' => now()]);
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c2->id, 'candidate_b_id' => $c3->id, 'winner_id' => $c2->id, 'voted_at' => now()]);
+    // Create voter with votes in JSON: C1 beats C2, C1 beats C3, C2 beats C3
+    $voter = Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [
+            "{$c1->id}_{$c2->id}" => $c1->id,  // C1 beats C2
+            "{$c1->id}_{$c3->id}" => $c1->id,  // C1 beats C3
+            "{$c2->id}_{$c3->id}" => $c2->id,  // C2 beats C3
+        ],
+        'duel_count' => 3,
+    ]);
 
     $service = new CondorcetService();
     $graph = $service->buildPreferenceGraph($election);
 
-    expect($graph[$c1->id][$c2->id])->toBe(1);
-    expect($graph[$c1->id][$c3->id])->toBe(1);
-    expect($graph[$c2->id][$c3->id])->toBe(1);
+    expect($graph[$c1->id][$c2->id])->toBe(1);  // C1 beat C2 once
+    expect($graph[$c1->id][$c3->id])->toBe(1);  // C1 beat C3 once
+    expect($graph[$c2->id][$c3->id])->toBe(1);  // C2 beat C3 once
+    expect($graph[$c2->id][$c1->id])->toBe(0);  // C2 never beat C1
 });
 
-test('calculates rankings correctly', function () {
+test('aggregates votes from multiple voters', function () {
+    $user1 = User::factory()->create();
+    $user2 = User::factory()->create();
+    $election = Election::factory()->create(['media_type_id' => $this->mediaType->id]);
+
+    $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
+    $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
+
+    // Voter 1: C1 wins
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user1->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],
+        'duel_count' => 1,
+    ]);
+
+    // Voter 2: C2 wins
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user2->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c2->id],
+        'duel_count' => 1,
+    ]);
+
+    $service = new CondorcetService();
+    $graph = $service->buildPreferenceGraph($election);
+
+    expect($graph[$c1->id][$c2->id])->toBe(1);  // C1 beat C2 once
+    expect($graph[$c2->id][$c1->id])->toBe(1);  // C2 beat C1 once
+});
+
+test('calculates rankings correctly using Ranked Pairs', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create([
         'media_type_id' => $this->mediaType->id,
@@ -644,12 +834,18 @@ test('calculates rankings correctly', function () {
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
     $c3 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:3', 'title' => 'Movie 3']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
-
     // Clear ranking: C1 > C2 > C3
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c1->id, 'candidate_b_id' => $c2->id, 'winner_id' => $c1->id, 'voted_at' => now()]);
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c1->id, 'candidate_b_id' => $c3->id, 'winner_id' => $c1->id, 'voted_at' => now()]);
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c2->id, 'candidate_b_id' => $c3->id, 'winner_id' => $c2->id, 'voted_at' => now()]);
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [
+            "{$c1->id}_{$c2->id}" => $c1->id,
+            "{$c1->id}_{$c3->id}" => $c1->id,
+            "{$c2->id}_{$c3->id}" => $c2->id,
+        ],
+        'duel_count' => 3,
+    ]);
 
     $service = new CondorcetService();
     $rankings = $service->calculateRankings($election);
@@ -669,9 +865,13 @@ test('gets top K winners', function () {
     $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
-
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c1->id, 'candidate_b_id' => $c2->id, 'winner_id' => $c1->id, 'voted_at' => now()]);
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],
+        'duel_count' => 1,
+    ]);
 
     $service = new CondorcetService();
     $winners = $service->getWinners($election);
@@ -696,17 +896,23 @@ Create `backend/app/Services/Election/CondorcetService.php`:
 
 namespace App\Services\Election;
 
-use App\Models\Candidate;
-use App\Models\Duel;
 use App\Models\Election;
-use Illuminate\Support\Collection;
+use App\Models\Voter;
 use Illuminate\Support\Facades\Cache;
 
+/**
+ * Implements Ranked Pairs (Tideman) algorithm with confidence-weighting.
+ * See docs/condorcet-implementation.md for algorithm details.
+ */
 class CondorcetService
 {
+    private const ALPHA = 1;           // Beta prior (Laplace smoothing)
+    private const MIN_PAIR_DUELS = 5;  // Minimum data before trusting a pair
+
     /**
-     * Build preference graph from duels
-     * Returns [candidateA][candidateB] = number of wins for A over B
+     * Build preference graph by aggregating all voters' JSON votes.
+     *
+     * @return array<int, array<int, int>> [candidateA][candidateB] = win count
      */
     public function buildPreferenceGraph(Election $election): array
     {
@@ -715,6 +921,7 @@ class CondorcetService
             ->pluck('id')
             ->toArray();
 
+        // Initialize graph
         $graph = [];
         foreach ($candidates as $a) {
             $graph[$a] = [];
@@ -723,24 +930,58 @@ class CondorcetService
             }
         }
 
-        // Count wins from all duels
-        $duels = Duel::where('election_id', $election->id)->get();
+        // Aggregate votes from all voters' JSON blobs
+        $voters = Voter::where('election_id', $election->id)->get();
 
-        foreach ($duels as $duel) {
-            $winner = $duel->winner_id;
-            $loser = $winner === $duel->candidate_a_id
-                ? $duel->candidate_b_id
-                : $duel->candidate_a_id;
+        foreach ($voters as $voter) {
+            $votes = $voter->votes ?? [];
 
-            $graph[$winner][$loser]++;
+            foreach ($votes as $pairKey => $winnerId) {
+                [$aId, $bId] = explode('_', $pairKey);
+                $aId = (int) $aId;
+                $bId = (int) $bId;
+
+                $loserId = ($winnerId === $aId) ? $bId : $aId;
+
+                if (isset($graph[$winnerId][$loserId])) {
+                    $graph[$winnerId][$loserId]++;
+                }
+            }
         }
 
         return $graph;
     }
 
     /**
-     * Calculate rankings using Copeland method (simplified Condorcet)
-     * Score = number of pairwise victories - number of pairwise defeats
+     * Compute pairwise statistics for each pair.
+     *
+     * @return array<string, array{wins_ij: int, wins_ji: int, total: int}>
+     */
+    public function computePairwiseStats(Election $election): array
+    {
+        $graph = $this->buildPreferenceGraph($election);
+        $candidates = array_keys($graph);
+        $stats = [];
+
+        for ($i = 0; $i < count($candidates); $i++) {
+            for ($j = $i + 1; $j < count($candidates); $j++) {
+                $a = $candidates[$i];
+                $b = $candidates[$j];
+                $key = "{$a}_{$b}";
+
+                $stats[$key] = [
+                    'wins_ij' => $graph[$a][$b],
+                    'wins_ji' => $graph[$b][$a],
+                    'total' => $graph[$a][$b] + $graph[$b][$a],
+                ];
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Calculate rankings using Ranked Pairs with confidence-weighting.
      */
     public function calculateRankings(Election $election): array
     {
@@ -752,35 +993,49 @@ class CondorcetService
                 ->where('is_approved', true)
                 ->get();
 
-            $scores = [];
+            // Build edges with robust strength
+            $edges = $this->buildRankedPairsEdges($graph, $candidates->pluck('id')->toArray());
 
+            // Sort by strength descending
+            usort($edges, fn ($a, $b) => $b['strength'] <=> $a['strength']);
+
+            // Lock edges without creating cycles
+            $lockedGraph = [];
+            foreach ($candidates as $c) {
+                $lockedGraph[$c->id] = [];
+            }
+
+            foreach ($edges as $edge) {
+                if (!$this->createsCycle($lockedGraph, $edge['from'], $edge['to'])) {
+                    $lockedGraph[$edge['from']][] = $edge['to'];
+                }
+            }
+
+            // Calculate scores based on locked graph
+            $scores = [];
             foreach ($candidates as $candidate) {
-                $wins = 0;
-                $losses = 0;
+                $outgoing = count($lockedGraph[$candidate->id] ?? []);
+                $incoming = 0;
+                foreach ($lockedGraph as $from => $tos) {
+                    if (in_array($candidate->id, $tos)) {
+                        $incoming++;
+                    }
+                }
+
+                // Also calculate raw win stats
                 $totalWins = 0;
                 $totalLosses = 0;
-
                 foreach ($candidates as $opponent) {
-                    if ($candidate->id === $opponent->id) {
-                        continue;
-                    }
-
-                    $winsAgainst = $graph[$candidate->id][$opponent->id] ?? 0;
-                    $lossesAgainst = $graph[$opponent->id][$candidate->id] ?? 0;
-
-                    $totalWins += $winsAgainst;
-                    $totalLosses += $lossesAgainst;
-
-                    if ($winsAgainst > $lossesAgainst) {
-                        $wins++;
-                    } elseif ($lossesAgainst > $winsAgainst) {
-                        $losses++;
+                    if ($candidate->id !== $opponent->id) {
+                        $totalWins += $graph[$candidate->id][$opponent->id] ?? 0;
+                        $totalLosses += $graph[$opponent->id][$candidate->id] ?? 0;
                     }
                 }
 
                 $scores[] = [
                     'candidate' => $candidate,
-                    'copeland_score' => $wins - $losses,
+                    'rank_score' => $outgoing - $incoming,
+                    'outgoing' => $outgoing,
                     'stats' => [
                         'wins' => $totalWins,
                         'losses' => $totalLosses,
@@ -791,12 +1046,20 @@ class CondorcetService
                 ];
             }
 
-            // Sort by Copeland score (descending)
-            usort($scores, fn ($a, $b) => $b['copeland_score'] <=> $a['copeland_score']);
+            // Sort by rank score (descending), then by total wins, then by candidate ID
+            usort($scores, function ($a, $b) {
+                if ($a['rank_score'] !== $b['rank_score']) {
+                    return $b['rank_score'] <=> $a['rank_score'];
+                }
+                if ($a['stats']['wins'] !== $b['stats']['wins']) {
+                    return $b['stats']['wins'] <=> $a['stats']['wins'];
+                }
+                return $a['candidate']->id <=> $b['candidate']->id;
+            });
 
             // Add ranks
             $rank = 1;
-            foreach ($scores as $index => &$score) {
+            foreach ($scores as &$score) {
                 $score['rank'] = $rank++;
             }
 
@@ -805,7 +1068,77 @@ class CondorcetService
     }
 
     /**
-     * Get top K winners based on election winner_count
+     * Build edges with robust strength for Ranked Pairs.
+     */
+    private function buildRankedPairsEdges(array $graph, array $candidateIds): array
+    {
+        $edges = [];
+
+        for ($i = 0; $i < count($candidateIds); $i++) {
+            for ($j = $i + 1; $j < count($candidateIds); $j++) {
+                $a = $candidateIds[$i];
+                $b = $candidateIds[$j];
+
+                $wins_ab = $graph[$a][$b];
+                $wins_ba = $graph[$b][$a];
+                $n = $wins_ab + $wins_ba;
+
+                if ($n < self::MIN_PAIR_DUELS) {
+                    // Not enough data, skip this pair
+                    continue;
+                }
+
+                // Smoothed probability
+                $p_ab = ($wins_ab + self::ALPHA) / ($n + 2 * self::ALPHA);
+
+                // Robust strength with √n penalty
+                $strength_ab = max(0, ($p_ab - 0.5) * sqrt($n));
+                $strength_ba = max(0, ((1 - $p_ab) - 0.5) * sqrt($n));
+
+                if ($strength_ab > 0) {
+                    $edges[] = ['from' => $a, 'to' => $b, 'strength' => $strength_ab];
+                }
+                if ($strength_ba > 0) {
+                    $edges[] = ['from' => $b, 'to' => $a, 'strength' => $strength_ba];
+                }
+            }
+        }
+
+        return $edges;
+    }
+
+    /**
+     * Check if adding an edge would create a cycle (DFS).
+     */
+    private function createsCycle(array $graph, int $from, int $to): bool
+    {
+        // Would adding from -> to create a cycle?
+        // Check if there's already a path from 'to' to 'from'
+        $visited = [];
+        $stack = [$to];
+
+        while (!empty($stack)) {
+            $node = array_pop($stack);
+
+            if ($node === $from) {
+                return true;  // Cycle detected
+            }
+
+            if (isset($visited[$node])) {
+                continue;
+            }
+            $visited[$node] = true;
+
+            foreach ($graph[$node] ?? [] as $neighbor) {
+                $stack[] = $neighbor;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get top K winners based on election winner_count.
      */
     public function getWinners(Election $election): array
     {
@@ -815,7 +1148,7 @@ class CondorcetService
     }
 
     /**
-     * Clear cached rankings
+     * Clear cached rankings.
      */
     public function clearCache(Election $election): void
     {
@@ -835,7 +1168,7 @@ Expected: PASS
 
 ```bash
 git add .
-git commit -m "feat: add CondorcetService for ranking calculation"
+git commit -m "feat: add CondorcetService with Ranked Pairs algorithm"
 ```
 
 ---
@@ -857,7 +1190,6 @@ use App\Models\User;
 use App\Models\Election;
 use App\Models\Candidate;
 use App\Models\Voter;
-use App\Models\Duel;
 use App\Models\MediaType;
 use App\Enums\ElectionStatus;
 use Tymon\JWTAuth\Facades\JWTAuth;
@@ -865,8 +1197,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 beforeEach(function () {
     $this->mediaType = MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
@@ -882,9 +1213,14 @@ test('voter can get results after election ends', function () {
     $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    $voter = Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
-
-    Duel::create(['election_id' => $election->id, 'voter_id' => $voter->id, 'candidate_a_id' => $c1->id, 'candidate_b_id' => $c2->id, 'winner_id' => $c1->id, 'voted_at' => now()]);
+    // Create voter with vote in JSON (C1 wins)
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],
+        'duel_count' => 1,
+    ]);
 
     $token = JWTAuth::fromUser($user);
 
@@ -910,7 +1246,12 @@ test('cannot get results while voting', function () {
         'status' => ElectionStatus::VOTING,
     ]);
 
-    Voter::create(['election_id' => $election->id, 'user_id' => $user->id, 'joined_at' => now()]);
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => [],
+    ]);
 
     $token = JWTAuth::fromUser($user);
 
@@ -941,7 +1282,6 @@ use App\Enums\ElectionStatus;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CandidateResource;
-use App\Models\Duel;
 use App\Models\Election;
 use App\Models\Voter;
 use App\Services\Election\CondorcetService;
@@ -971,21 +1311,22 @@ class ResultsController extends Controller
 
         $winners = $this->condorcetService->getWinners($election);
         $fullRanking = $this->condorcetService->calculateRankings($election);
-        $totalDuels = Duel::where('election_id', $election->id)->count();
 
-        $voterParticipation = $election->voters->map(function ($voter) {
-            $duelsCompleted = Duel::where('voter_id', $voter->id)->count();
-            $totalPossible = $this->calculateTotalPairs(
-                $voter->election->candidates()->where('is_approved', true)->count()
-            );
+        // Count total duels from all voters' JSON blobs
+        $totalDuels = $election->voters->sum('duel_count');
 
+        $totalPossible = $this->calculateTotalPairs(
+            $election->candidates()->where('is_approved', true)->count()
+        );
+
+        $voterParticipation = $election->voters->map(function ($voter) use ($totalPossible) {
             return [
                 'voter' => [
                     'display_name' => $voter->user->display_name,
                 ],
-                'duels_completed' => $duelsCompleted,
+                'duels_completed' => $voter->duel_count,
                 'percentage' => $totalPossible > 0
-                    ? round(($duelsCompleted / $totalPossible) * 100, 1)
+                    ? round(($voter->duel_count / $totalPossible) * 100, 1)
                     : 0,
             ];
         });
@@ -1083,8 +1424,7 @@ use Illuminate\Support\Carbon;
 beforeEach(function () {
     MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });

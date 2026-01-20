@@ -175,8 +175,7 @@ test('user has required fillable attributes', function () {
 
     expect($user->getFillable())->toContain('email')
         ->toContain('password')
-        ->toContain('display_name')
-        ->toContain('locale');
+        ->toContain('display_name');
 });
 
 test('user has jwt methods', function () {
@@ -223,9 +222,6 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('is_admin')->default(false);
             $table->boolean('is_banned')->default(false);
-            $table->string('locale', 5)->default('en');
-            $table->boolean('notif_email')->default(true);
-            $table->boolean('notif_push')->default(true);
             $table->rememberToken();
             $table->timestamps();
         });
@@ -277,9 +273,6 @@ class User extends Authenticatable implements JWTSubject
         'password',
         'display_name',
         'avatar_url',
-        'locale',
-        'notif_email',
-        'notif_push',
     ];
 
     protected $hidden = [
@@ -294,9 +287,12 @@ class User extends Authenticatable implements JWTSubject
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_banned' => 'boolean',
-            'notif_email' => 'boolean',
-            'notif_push' => 'boolean',
         ];
+    }
+
+    public function preference(): HasOne
+    {
+        return $this->hasOne(UserPreference::class);
     }
 
     public function getJWTIdentifier(): mixed
@@ -333,7 +329,134 @@ git commit -m "feat: add User model with JWT support"
 
 ---
 
-## Task 5: Create MediaType Migration and Model
+## Task 5: Create UserPreference Migration and Model
+
+**Files:**
+- Create: `backend/database/migrations/2024_01_01_000001_create_user_preferences_table.php`
+- Create: `backend/app/Models/UserPreference.php`
+- Create: `backend/tests/Unit/Models/UserPreferenceTest.php`
+
+**Step 1: Write UserPreference model test**
+
+Create `backend/tests/Unit/Models/UserPreferenceTest.php`:
+```php
+<?php
+
+use App\Models\UserPreference;
+
+test('user preference belongs to user', function () {
+    $preference = new UserPreference();
+
+    expect(method_exists($preference, 'user'))->toBeTrue();
+});
+
+test('user preference has notification settings', function () {
+    $preference = new UserPreference();
+
+    expect($preference->getFillable())->toContain('locale')
+        ->toContain('notif_email')
+        ->toContain('notif_push');
+});
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+php artisan test tests/Unit/Models/UserPreferenceTest.php
+```
+Expected: FAIL
+
+**Step 3: Create migration**
+
+```bash
+php artisan make:migration create_user_preferences_table
+```
+
+Edit the created migration:
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('user_preferences', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->unique()->constrained('users')->onDelete('cascade');
+            $table->string('locale', 5)->default('en');
+            $table->boolean('notif_email')->default(true);
+            $table->boolean('notif_push')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('user_preferences');
+    }
+};
+```
+
+**Step 4: Create UserPreference model**
+
+Create `backend/app/Models/UserPreference.php`:
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class UserPreference extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'user_id',
+        'locale',
+        'notif_email',
+        'notif_push',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'notif_email' => 'boolean',
+            'notif_push' => 'boolean',
+        ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+}
+```
+
+**Step 5: Run migration and tests**
+
+```bash
+php artisan migrate
+php artisan test tests/Unit/Models/UserPreferenceTest.php
+```
+Expected: PASS
+
+**Step 6: Commit**
+
+```bash
+git add .
+git commit -m "feat: add UserPreference model"
+```
+
+---
+
+## Task 6: Create MediaType Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000001_create_media_types_table.php`
@@ -352,8 +475,7 @@ test('media type has required fillable attributes', function () {
     $mediaType = new MediaType();
 
     expect($mediaType->getFillable())->toContain('code')
-        ->toContain('label_en')
-        ->toContain('label_fr')
+        ->toContain('label')
         ->toContain('api_source');
 });
 
@@ -392,9 +514,8 @@ return new class extends Migration
         Schema::create('media_types', function (Blueprint $table) {
             $table->id();
             $table->string('code', 50)->unique();
-            $table->string('label_en', 100);
-            $table->string('label_fr', 100);
-            $table->string('api_source', 50);
+            $table->string('label', 100);
+            $table->enum('api_source', ['tmdb', 'rawg', 'bgg', 'custom']);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
@@ -425,8 +546,7 @@ class MediaType extends Model
 
     protected $fillable = [
         'code',
-        'label_en',
-        'label_fr',
+        'label',
         'api_source',
         'is_active',
     ];
@@ -467,7 +587,7 @@ git commit -m "feat: add MediaType model"
 
 ---
 
-## Task 6: Create Friendship Migration and Model
+## Task 7: Create Friendship Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000002_create_friendships_table.php`
@@ -618,7 +738,7 @@ git commit -m "feat: add Friendship model with status enum"
 
 ---
 
-## Task 7: Create Election Migration and Model
+## Task 8: Create Election Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000003_create_elections_table.php`
@@ -705,6 +825,7 @@ return new class extends Migration
         Schema::create('elections', function (Blueprint $table) {
             $table->id();
             $table->uuid('uuid')->unique();
+            $table->string('invite_token', 64)->unique();
             $table->string('title');
             $table->text('description')->nullable();
             $table->foreignId('media_type_id')->constrained('media_types');
@@ -752,6 +873,7 @@ class Election extends Model
 
     protected $fillable = [
         'uuid',
+        'invite_token',
         'title',
         'description',
         'media_type_id',
@@ -785,6 +907,9 @@ class Election extends Model
             if (empty($election->uuid)) {
                 $election->uuid = Str::uuid();
             }
+            if (empty($election->invite_token)) {
+                $election->invite_token = Str::random(64);
+            }
         });
     }
 
@@ -807,16 +932,6 @@ class Election extends Model
     {
         return $this->hasMany(Voter::class);
     }
-
-    public function invitations(): HasMany
-    {
-        return $this->hasMany(Invitation::class);
-    }
-
-    public function duels(): HasMany
-    {
-        return $this->hasMany(Duel::class);
-    }
 }
 ```
 
@@ -837,7 +952,7 @@ git commit -m "feat: add Election model with status enum"
 
 ---
 
-## Task 8: Create Candidate Migration and Model
+## Task 9: Create Candidate Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000004_create_candidates_table.php`
@@ -966,16 +1081,6 @@ class Candidate extends Model
     {
         return $this->belongsTo(User::class, 'suggested_by');
     }
-
-    public function duelsAsA(): HasMany
-    {
-        return $this->hasMany(Duel::class, 'candidate_a_id');
-    }
-
-    public function duelsAsB(): HasMany
-    {
-        return $this->hasMany(Duel::class, 'candidate_b_id');
-    }
 }
 ```
 
@@ -996,7 +1101,7 @@ git commit -m "feat: add Candidate model"
 
 ---
 
-## Task 9: Create Voter Migration and Model
+## Task 10: Create Voter Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000005_create_voters_table.php`
@@ -1018,10 +1123,11 @@ test('voter belongs to election and user', function () {
     expect(method_exists($voter, 'user'))->toBeTrue();
 });
 
-test('voter has duels relationship', function () {
+test('voter has votes JSON and duel_count', function () {
     $voter = new Voter();
 
-    expect(method_exists($voter, 'duels'))->toBeTrue();
+    expect($voter->getCasts())->toHaveKey('votes');
+    expect($voter->getFillable())->toContain('duel_count');
 });
 ```
 
@@ -1054,6 +1160,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('election_id')->constrained('elections')->onDelete('cascade');
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->json('votes')->default('{}');  // Compact duel storage: {"1_2": 1, "1_3": 3, ...}
+            $table->smallInteger('duel_count')->default(0);
             $table->timestamp('joined_at');
             $table->boolean('completed')->default(false);
             $table->timestamps();
@@ -1091,6 +1199,8 @@ class Voter extends Model
     protected $fillable = [
         'election_id',
         'user_id',
+        'votes',
+        'duel_count',
         'joined_at',
         'completed',
     ];
@@ -1098,6 +1208,8 @@ class Voter extends Model
     protected function casts(): array
     {
         return [
+            'votes' => 'array',  // JSON blob: {"1_2": 1, "1_3": 3, ...}
+            'duel_count' => 'integer',
             'joined_at' => 'datetime',
             'completed' => 'boolean',
         ];
@@ -1111,11 +1223,6 @@ class Voter extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function duels(): HasMany
-    {
-        return $this->hasMany(Duel::class);
     }
 }
 ```
@@ -1137,305 +1244,7 @@ git commit -m "feat: add Voter model"
 
 ---
 
-## Task 10: Create Invitation Migration and Model
-
-**Files:**
-- Create: `backend/database/migrations/2024_01_01_000006_create_invitations_table.php`
-- Create: `backend/app/Models/Invitation.php`
-- Create: `backend/tests/Unit/Models/InvitationTest.php`
-
-**Step 1: Write Invitation model test**
-
-Create `backend/tests/Unit/Models/InvitationTest.php`:
-```php
-<?php
-
-use App\Models\Invitation;
-
-test('invitation belongs to election', function () {
-    $invitation = new Invitation();
-
-    expect(method_exists($invitation, 'election'))->toBeTrue();
-});
-
-test('invitation has token attribute', function () {
-    $invitation = new Invitation();
-
-    expect($invitation->getFillable())->toContain('token');
-});
-```
-
-**Step 2: Run test to verify it fails**
-
-```bash
-php artisan test tests/Unit/Models/InvitationTest.php
-```
-Expected: FAIL
-
-**Step 3: Create migration**
-
-```bash
-php artisan make:migration create_invitations_table
-```
-
-Edit the created migration:
-```php
-<?php
-
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('invitations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('election_id')->constrained('elections')->onDelete('cascade');
-            $table->string('email');
-            $table->string('token', 64)->unique();
-            $table->timestamp('sent_at');
-            $table->timestamp('accepted_at')->nullable();
-            $table->timestamps();
-
-            $table->unique(['election_id', 'email']);
-            $table->index('token');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('invitations');
-    }
-};
-```
-
-**Step 4: Create Invitation model**
-
-Create `backend/app/Models/Invitation.php`:
-```php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Str;
-
-class Invitation extends Model
-{
-    use HasFactory;
-
-    protected $fillable = [
-        'election_id',
-        'email',
-        'token',
-        'sent_at',
-        'accepted_at',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'sent_at' => 'datetime',
-            'accepted_at' => 'datetime',
-        ];
-    }
-
-    protected static function boot(): void
-    {
-        parent::boot();
-
-        static::creating(function (Invitation $invitation) {
-            if (empty($invitation->token)) {
-                $invitation->token = Str::random(64);
-            }
-        });
-    }
-
-    public function election(): BelongsTo
-    {
-        return $this->belongsTo(Election::class);
-    }
-}
-```
-
-**Step 5: Run migration and tests**
-
-```bash
-php artisan migrate
-php artisan test tests/Unit/Models/InvitationTest.php
-```
-Expected: PASS
-
-**Step 6: Commit**
-
-```bash
-git add .
-git commit -m "feat: add Invitation model"
-```
-
----
-
-## Task 11: Create Duel Migration and Model
-
-**Files:**
-- Create: `backend/database/migrations/2024_01_01_000007_create_duels_table.php`
-- Create: `backend/app/Models/Duel.php`
-- Create: `backend/tests/Unit/Models/DuelTest.php`
-
-**Step 1: Write Duel model test**
-
-Create `backend/tests/Unit/Models/DuelTest.php`:
-```php
-<?php
-
-use App\Models\Duel;
-
-test('duel belongs to election, voter, and candidates', function () {
-    $duel = new Duel();
-
-    expect(method_exists($duel, 'election'))->toBeTrue();
-    expect(method_exists($duel, 'voter'))->toBeTrue();
-    expect(method_exists($duel, 'candidateA'))->toBeTrue();
-    expect(method_exists($duel, 'candidateB'))->toBeTrue();
-    expect(method_exists($duel, 'winner'))->toBeTrue();
-});
-
-test('duel voted_at is cast to datetime', function () {
-    $duel = new Duel();
-
-    expect($duel->getCasts())->toHaveKey('voted_at');
-});
-```
-
-**Step 2: Run test to verify it fails**
-
-```bash
-php artisan test tests/Unit/Models/DuelTest.php
-```
-Expected: FAIL
-
-**Step 3: Create migration**
-
-```bash
-php artisan make:migration create_duels_table
-```
-
-Edit the created migration:
-```php
-<?php
-
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('duels', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('election_id')->constrained('elections')->onDelete('cascade');
-            $table->foreignId('voter_id')->constrained('voters')->onDelete('cascade');
-            $table->foreignId('candidate_a_id')->constrained('candidates')->onDelete('cascade');
-            $table->foreignId('candidate_b_id')->constrained('candidates')->onDelete('cascade');
-            $table->foreignId('winner_id')->constrained('candidates')->onDelete('cascade');
-            $table->timestamp('voted_at');
-            $table->timestamps();
-
-            $table->unique(['voter_id', 'candidate_a_id', 'candidate_b_id']);
-            $table->index('voter_id');
-            $table->index('election_id');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('duels');
-    }
-};
-```
-
-**Step 4: Create Duel model**
-
-Create `backend/app/Models/Duel.php`:
-```php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
-class Duel extends Model
-{
-    use HasFactory;
-
-    protected $fillable = [
-        'election_id',
-        'voter_id',
-        'candidate_a_id',
-        'candidate_b_id',
-        'winner_id',
-        'voted_at',
-    ];
-
-    protected function casts(): array
-    {
-        return [
-            'voted_at' => 'datetime',
-        ];
-    }
-
-    public function election(): BelongsTo
-    {
-        return $this->belongsTo(Election::class);
-    }
-
-    public function voter(): BelongsTo
-    {
-        return $this->belongsTo(Voter::class);
-    }
-
-    public function candidateA(): BelongsTo
-    {
-        return $this->belongsTo(Candidate::class, 'candidate_a_id');
-    }
-
-    public function candidateB(): BelongsTo
-    {
-        return $this->belongsTo(Candidate::class, 'candidate_b_id');
-    }
-
-    public function winner(): BelongsTo
-    {
-        return $this->belongsTo(Candidate::class, 'winner_id');
-    }
-}
-```
-
-**Step 5: Run migration and tests**
-
-```bash
-php artisan migrate
-php artisan test tests/Unit/Models/DuelTest.php
-```
-Expected: PASS
-
-**Step 6: Commit**
-
-```bash
-git add .
-git commit -m "feat: add Duel model"
-```
-
----
-
-## Task 12: Add User Relationships
+## Task 11: Add User Relationships (formerly Task 12)
 
 **Files:**
 - Modify: `backend/app/Models/User.php`
@@ -1556,32 +1365,27 @@ class MediaTypeSeeder extends Seeder
         $types = [
             [
                 'code' => 'movie',
-                'label_en' => 'Movie',
-                'label_fr' => 'Film',
+                'label' => 'media_type.movie',
                 'api_source' => 'tmdb',
             ],
             [
                 'code' => 'tvshow',
-                'label_en' => 'TV Show',
-                'label_fr' => 'Série TV',
+                'label' => 'media_type.tvshow',
                 'api_source' => 'tmdb',
             ],
             [
                 'code' => 'videogame',
-                'label_en' => 'Video Game',
-                'label_fr' => 'Jeu Vidéo',
+                'label' => 'media_type.videogame',
                 'api_source' => 'rawg',
             ],
             [
                 'code' => 'boardgame',
-                'label_en' => 'Board Game',
-                'label_fr' => 'Jeu de Société',
+                'label' => 'media_type.boardgame',
                 'api_source' => 'bgg',
             ],
             [
                 'code' => 'theater',
-                'label_en' => 'Theater',
-                'label_fr' => 'Théâtre',
+                'label' => 'media_type.theater',
                 'api_source' => 'custom',
             ],
         ];
@@ -1675,8 +1479,10 @@ git commit -m "chore: phase 1 complete - backend foundation"
 - [ ] Laravel 11 project created
 - [ ] JWT authentication configured
 - [ ] Pest testing framework installed
-- [ ] All 8 migrations created and run
-- [ ] All 8 models with relationships
+- [ ] All 7 migrations created and run (User, UserPreference, MediaType, Friendship, Election, Candidate, Voter)
+- [ ] All 7 models with relationships (Voter includes votes JSON for compact duel storage)
 - [ ] 2 enums (ElectionStatus, FriendshipStatus)
 - [ ] MediaType seeder with 5 types
 - [ ] All unit tests passing
+
+**Note:** Duel votes are stored as JSON in the Voter table (not a separate Duel table) for scalability.

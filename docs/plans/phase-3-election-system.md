@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement election creation, candidate management, invitation system, and media search integration.
+**Goal:** Implement election creation, candidate management, join election system, and media search integration.
 
-**Architecture:** ElectionService handles business logic. MediaSearchService provides unified interface for external APIs (TMDB, RAWG, BGG). Magic links via signed URLs.
+**Architecture:** ElectionService handles business logic. MediaSearchService provides unified interface for external APIs (TMDB, RAWG, BGG). Join system via `invite_token` on Election.
 
 **Tech Stack:** Laravel 11, Guzzle HTTP, Laravel Cache, API Resources
 
@@ -861,8 +861,7 @@ use App\Enums\ElectionStatus;
 beforeEach(function () {
     $this->mediaType = MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
@@ -1097,8 +1096,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 beforeEach(function () {
     MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
@@ -1276,7 +1274,7 @@ class ElectionResource extends JsonResource
             'title' => $this->title,
             'media_type' => [
                 'code' => $this->mediaType->code,
-                'label' => $this->mediaType->{'label_' . app()->getLocale()} ?? $this->mediaType->label_en,
+                'label' => __($this->mediaType->label),
             ],
             'status' => $this->status->value,
             'is_maestro' => $request->user()?->id === $this->maestro_id,
@@ -1313,7 +1311,7 @@ class ElectionDetailResource extends JsonResource
             'description' => $this->description,
             'media_type' => [
                 'code' => $this->mediaType->code,
-                'label' => $this->mediaType->{'label_' . app()->getLocale()} ?? $this->mediaType->label_en,
+                'label' => __($this->mediaType->label),
             ],
             'maestro' => [
                 'id' => $this->maestro->id,
@@ -1517,76 +1515,78 @@ git commit -m "feat: add election CRUD endpoints"
 
 ---
 
-## Task 9: Create Invitation System
+## Task 9: Create Join Election System
 
 **Files:**
-- Create: `backend/app/Services/Election/InvitationService.php`
-- Create: `backend/app/Http/Controllers/Api/V1/InvitationController.php`
+- Modify: `backend/app/Http/Controllers/Api/V1/ElectionController.php`
 - Modify: `backend/routes/api.php`
-- Create: `backend/tests/Feature/Election/InvitationTest.php`
+- Create: `backend/tests/Feature/Election/JoinElectionTest.php`
 
-**Step 1: Write invitation tests**
+**Step 1: Write join election tests**
 
-Create `backend/tests/Feature/Election/InvitationTest.php`:
+Create `backend/tests/Feature/Election/JoinElectionTest.php`:
 ```php
 <?php
 
 use App\Models\User;
 use App\Models\Election;
 use App\Models\MediaType;
-use App\Models\Invitation;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 beforeEach(function () {
     MediaType::create([
         'code' => 'movie',
-        'label_en' => 'Movie',
-        'label_fr' => 'Film',
+        'label' => 'media_type.movie',
         'api_source' => 'tmdb',
     ]);
 });
 
-test('maestro can invite by email', function () {
+test('maestro can get invite link', function () {
     $user = User::factory()->create(['email_verified_at' => now()]);
     $election = Election::factory()->create(['maestro_id' => $user->id]);
     $token = JWTAuth::fromUser($user);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson("/api/v1/elections/{$election->uuid}/invitations", [
-            'emails' => ['friend@example.com'],
-        ]);
+        ->getJson("/api/v1/elections/{$election->uuid}/invite-link");
 
-    $response->assertStatus(201)
-        ->assertJsonPath('data.invited', 1)
-        ->assertJsonStructure(['data' => ['magic_link']]);
+    $response->assertStatus(200)
+        ->assertJsonStructure(['data' => ['invite_link', 'invite_token']]);
 });
 
-test('user can get election info via magic link', function () {
-    $election = Election::factory()->create();
-    $invitation = Invitation::create([
-        'election_id' => $election->id,
-        'email' => 'test@example.com',
-        'sent_at' => now(),
-    ]);
+test('non-maestro cannot get invite link', function () {
+    $maestro = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $election = Election::factory()->create(['maestro_id' => $maestro->id]);
+    $token = JWTAuth::fromUser($otherUser);
 
-    $response = $this->getJson("/api/v1/elections/join/{$invitation->token}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/elections/{$election->uuid}/invite-link");
+
+    $response->assertStatus(403);
+});
+
+test('user can get election info via invite token', function () {
+    $election = Election::factory()->create();
+
+    $response = $this->getJson("/api/v1/elections/join/{$election->invite_token}");
 
     $response->assertStatus(200)
         ->assertJsonPath('data.election.uuid', $election->uuid);
 });
 
-test('user can join election via magic link', function () {
+test('invalid invite token returns 404', function () {
+    $response = $this->getJson('/api/v1/elections/join/invalid-token');
+
+    $response->assertStatus(404);
+});
+
+test('authenticated user can join election via invite token', function () {
     $user = User::factory()->create();
     $election = Election::factory()->create();
-    $invitation = Invitation::create([
-        'election_id' => $election->id,
-        'email' => $user->email,
-        'sent_at' => now(),
-    ]);
     $token = JWTAuth::fromUser($user);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson("/api/v1/elections/join/{$invitation->token}");
+        ->postJson("/api/v1/elections/join/{$election->invite_token}");
 
     $response->assertStatus(200);
 
@@ -1595,271 +1595,165 @@ test('user can join election via magic link', function () {
         'user_id' => $user->id,
     ]);
 });
+
+test('user cannot join same election twice', function () {
+    $user = User::factory()->create();
+    $election = Election::factory()->create();
+    $token = JWTAuth::fromUser($user);
+
+    // Join first time
+    $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/elections/join/{$election->invite_token}");
+
+    // Try to join again
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/elections/join/{$election->invite_token}");
+
+    $response->assertStatus(200); // Still succeeds, just doesn't create duplicate
+
+    $this->assertDatabaseCount('voters', 1);
+});
 ```
 
 **Step 2: Run test to verify it fails**
 
 ```bash
-php artisan test tests/Feature/Election/InvitationTest.php
+php artisan test tests/Feature/Election/JoinElectionTest.php
 ```
 Expected: FAIL
 
-**Step 3: Create InvitationService**
+**Step 3: Add join methods to ElectionController**
 
-Create `backend/app/Services/Election/InvitationService.php`:
+Update `backend/app/Http/Controllers/Api/V1/ElectionController.php`, add these methods:
 ```php
-<?php
-
-namespace App\Services\Election;
-
-use App\Exceptions\ApiException;
-use App\Models\Election;
-use App\Models\Invitation;
-use App\Models\User;
-use App\Models\Voter;
-use Illuminate\Support\Facades\DB;
-
-class InvitationService
+public function getInviteLink(string $uuid): JsonResponse
 {
-    public function invite(Election $election, array $emails, array $friendIds = []): array
-    {
-        $invited = 0;
+    $election = Election::where('uuid', $uuid)->firstOrFail();
 
-        DB::transaction(function () use ($election, $emails, $friendIds, &$invited) {
-            foreach ($emails as $email) {
-                $existing = Invitation::where('election_id', $election->id)
-                    ->where('email', $email)
-                    ->first();
-
-                if (!$existing) {
-                    Invitation::create([
-                        'election_id' => $election->id,
-                        'email' => $email,
-                        'sent_at' => now(),
-                    ]);
-                    $invited++;
-                }
-            }
-
-            foreach ($friendIds as $friendId) {
-                $friend = User::find($friendId);
-                if ($friend) {
-                    $existingVoter = Voter::where('election_id', $election->id)
-                        ->where('user_id', $friendId)
-                        ->first();
-
-                    if (!$existingVoter) {
-                        Voter::create([
-                            'election_id' => $election->id,
-                            'user_id' => $friendId,
-                            'joined_at' => now(),
-                        ]);
-                        $invited++;
-                    }
-                }
-            }
-        });
-
-        $magicLink = $this->generateMagicLink($election);
-
-        return [
-            'invited' => $invited,
-            'magic_link' => $magicLink,
-        ];
-    }
-
-    public function getElectionByToken(string $token): ?Election
-    {
-        $invitation = Invitation::where('token', $token)->first();
-
-        if (!$invitation) {
-            return null;
-        }
-
-        return $invitation->election;
-    }
-
-    public function joinByToken(User $user, string $token, bool $addFriend = false): Election
-    {
-        $invitation = Invitation::where('token', $token)->first();
-
-        if (!$invitation) {
-            throw new ApiException(
-                'INVALID_TOKEN',
-                'Invalid invitation token.',
-                404
-            );
-        }
-
-        $election = $invitation->election;
-
-        $existingVoter = Voter::where('election_id', $election->id)
-            ->where('user_id', $user->id)
-            ->first();
-
-        if (!$existingVoter) {
-            Voter::create([
-                'election_id' => $election->id,
-                'user_id' => $user->id,
-                'joined_at' => now(),
-            ]);
-        }
-
-        $invitation->update(['accepted_at' => now()]);
-
-        return $election->load(['mediaType', 'maestro', 'candidates', 'voters.user']);
-    }
-
-    private function generateMagicLink(Election $election): string
-    {
-        $invitation = Invitation::where('election_id', $election->id)->first();
-
-        if (!$invitation) {
-            $invitation = Invitation::create([
-                'election_id' => $election->id,
-                'email' => 'public@' . $election->uuid,
-                'sent_at' => now(),
-            ]);
-        }
-
-        return config('app.frontend_url', config('app.url')) . '/join/' . $invitation->token;
-    }
-}
-```
-
-**Step 4: Create InvitationController**
-
-Create `backend/app/Http/Controllers/Api/V1/InvitationController.php`:
-```php
-<?php
-
-namespace App\Http\Controllers\Api\V1;
-
-use App\Http\Controllers\Controller;
-use App\Http\Resources\ElectionDetailResource;
-use App\Models\Election;
-use App\Services\Election\InvitationService;
-use App\Exceptions\ApiException;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-
-class InvitationController extends Controller
-{
-    public function __construct(
-        private InvitationService $invitationService
-    ) {}
-
-    public function store(Request $request, string $uuid): JsonResponse
-    {
-        $request->validate([
-            'emails' => ['nullable', 'array'],
-            'emails.*' => ['email'],
-            'friend_ids' => ['nullable', 'array'],
-            'friend_ids.*' => ['integer', 'exists:users,id'],
-        ]);
-
-        $election = Election::where('uuid', $uuid)->firstOrFail();
-
-        if ($election->maestro_id !== auth()->id()) {
-            throw new ApiException(
-                'FORBIDDEN',
-                'Only the maestro can invite voters.',
-                403
-            );
-        }
-
-        $result = $this->invitationService->invite(
-            $election,
-            $request->input('emails', []),
-            $request->input('friend_ids', [])
+    if ($election->maestro_id !== auth()->id()) {
+        throw new ApiException(
+            'FORBIDDEN',
+            'Only the maestro can get the invite link.',
+            403
         );
-
-        return response()->json([
-            'data' => $result,
-        ], 201);
     }
 
-    public function showByToken(string $token): JsonResponse
-    {
-        $election = $this->invitationService->getElectionByToken($token);
+    $inviteLink = config('app.frontend_url', config('app.url')) . '/join/' . $election->invite_token;
 
-        if (!$election) {
-            throw new ApiException(
-                'NOT_FOUND',
-                'Election not found.',
-                404
-            );
-        }
+    return response()->json([
+        'data' => [
+            'invite_link' => $inviteLink,
+            'invite_token' => $election->invite_token,
+        ],
+    ]);
+}
 
-        return response()->json([
-            'data' => [
-                'election' => [
-                    'uuid' => $election->uuid,
-                    'title' => $election->title,
-                    'media_type' => [
-                        'code' => $election->mediaType->code,
-                        'label' => $election->mediaType->label_en,
-                    ],
-                    'maestro' => [
-                        'display_name' => $election->maestro->display_name,
-                    ],
-                    'status' => $election->status->value,
-                    'candidate_count' => $election->candidates()->count(),
-                    'voter_count' => $election->voters()->count(),
+public function showByInviteToken(string $inviteToken): JsonResponse
+{
+    $election = Election::where('invite_token', $inviteToken)
+        ->with(['mediaType', 'maestro'])
+        ->first();
+
+    if (!$election) {
+        throw new ApiException(
+            'NOT_FOUND',
+            'Election not found.',
+            404
+        );
+    }
+
+    return response()->json([
+        'data' => [
+            'election' => [
+                'uuid' => $election->uuid,
+                'title' => $election->title,
+                'media_type' => [
+                    'code' => $election->mediaType->code,
+                    'label' => __($election->mediaType->label),
                 ],
-                'requires_auth' => true,
+                'maestro' => [
+                    'display_name' => $election->maestro->display_name,
+                ],
+                'status' => $election->status->value,
+                'candidate_count' => $election->candidates()->count(),
+                'voter_count' => $election->voters()->count(),
             ],
-        ]);
-    }
+            'requires_auth' => true,
+        ],
+    ]);
+}
 
-    public function joinByToken(Request $request, string $token): JsonResponse
-    {
-        $request->validate([
-            'add_friend' => ['nullable', 'boolean'],
-        ]);
+public function joinByInviteToken(Request $request, string $inviteToken): JsonResponse
+{
+    $election = Election::where('invite_token', $inviteToken)
+        ->with(['mediaType', 'maestro', 'candidates', 'voters.user'])
+        ->first();
 
-        $election = $this->invitationService->joinByToken(
-            auth()->user(),
-            $token,
-            $request->boolean('add_friend', false)
+    if (!$election) {
+        throw new ApiException(
+            'NOT_FOUND',
+            'Election not found.',
+            404
         );
-
-        return response()->json([
-            'data' => [
-                'election' => new ElectionDetailResource($election),
-                'friendship_created' => false, // TODO: implement
-            ],
-        ]);
     }
+
+    $user = auth()->user();
+
+    $existingVoter = Voter::where('election_id', $election->id)
+        ->where('user_id', $user->id)
+        ->first();
+
+    if (!$existingVoter) {
+        Voter::create([
+            'election_id' => $election->id,
+            'user_id' => $user->id,
+            'joined_at' => now(),
+        ]);
+
+        $election->load('voters.user'); // Refresh voters
+    }
+
+    return response()->json([
+        'data' => [
+            'election' => new ElectionDetailResource($election),
+            'already_joined' => (bool) $existingVoter,
+        ],
+    ]);
 }
 ```
 
-**Step 5: Add routes**
-
-Add to `backend/routes/api.php`:
+Add these imports at the top of ElectionController:
 ```php
-use App\Http\Controllers\Api\V1\InvitationController;
-
-// Public route (no auth)
-Route::get('elections/join/{token}', [InvitationController::class, 'showByToken']);
-
-// Inside auth:api middleware, verified group:
-Route::post('elections/{uuid}/invitations', [InvitationController::class, 'store']);
-Route::post('elections/join/{token}', [InvitationController::class, 'joinByToken'])->withoutMiddleware('verified');
+use App\Models\Voter;
+use Illuminate\Http\Request;
 ```
 
-**Step 6: Run tests**
+**Step 4: Add routes**
+
+Update `backend/routes/api.php`:
+```php
+use App\Http\Controllers\Api\V1\ElectionController;
+
+// Public route (no auth required)
+Route::get('elections/join/{inviteToken}', [ElectionController::class, 'showByInviteToken']);
+
+// Inside auth:api middleware:
+Route::get('elections/{uuid}/invite-link', [ElectionController::class, 'getInviteLink']);
+Route::post('elections/join/{inviteToken}', [ElectionController::class, 'joinByInviteToken']);
+```
+
+**Step 5: Run tests**
 
 ```bash
-php artisan test tests/Feature/Election/InvitationTest.php
+php artisan test tests/Feature/Election/JoinElectionTest.php
 ```
 Expected: PASS
 
-**Step 7: Commit**
+**Step 6: Commit**
 
 ```bash
 git add .
-git commit -m "feat: add invitation system with magic links"
+git commit -m "feat: add join election system with invite tokens"
 ```
 
 ---
@@ -1893,5 +1787,5 @@ git commit -m "chore: phase 3 complete - election system"
 - [ ] ElectionService with create/close logic
 - [ ] Election CRUD endpoints
 - [ ] ElectionResource and ElectionDetailResource
-- [ ] Invitation system with magic links
+- [ ] Join election system with invite tokens
 - [ ] All feature tests passing
