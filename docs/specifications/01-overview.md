@@ -131,5 +131,6 @@ Uses **Condorcet method with incomplete duels**:
 | Backend | Laravel (PHP) |
 | Frontend | Flutter (Dart) |
 | Authentication | Laravel Sanctum (API tokens) |
+| Circuit Breaker | ackintosh/ganesha (for external APIs) |
 | Languages | English, French (i18n ready) |
 | Connectivity | Online only |

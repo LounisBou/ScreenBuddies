@@ -6,7 +6,7 @@
 
 **Architecture:** ElectionService handles business logic. MediaSearchService provides unified interface for external APIs (TMDB, RAWG, BGG). Join system via `invite_token` on Election.
 
-**Tech Stack:** Laravel 11, Guzzle HTTP, Laravel Cache, API Resources
+**Tech Stack:** Laravel 11, Guzzle HTTP, Laravel Cache, API Resources, ackintosh/ganesha (Circuit Breaker)
 
 **Prerequisites:** Phase 2 complete (auth, user management)
 
@@ -76,6 +76,135 @@ RAWG_API_KEY=your-rawg-key
 ```bash
 git add .
 git commit -m "chore: add election and media config"
+```
+
+---
+
+## Task 1.5: Setup Circuit Breaker (Ganesha)
+
+> **Reference:** See `docs/circuit-breaker.md` for full documentation on the circuit breaker pattern and configuration.
+
+**Files:**
+- Create: `backend/config/ganesha.php`
+- Create: `backend/app/Services/CircuitBreaker/GaneshaService.php`
+
+**Step 1: Install Ganesha**
+
+```bash
+composer require ackintosh/ganesha
+```
+
+**Step 2: Create Ganesha config**
+
+Create `backend/config/ganesha.php`:
+```php
+<?php
+
+return [
+    'adapter' => env('GANESHA_ADAPTER', 'redis'),
+    'redis' => [
+        'host' => env('REDIS_HOST', '127.0.0.1'),
+        'port' => env('REDIS_PORT', 6379),
+    ],
+    'services' => [
+        'tmdb' => [
+            'failure_rate_threshold' => 50,  // Open circuit at 50% failure rate
+            'interval_to_half_open' => 30,   // Try again after 30 seconds
+            'minimum_requests' => 10,        // Need 10 requests before measuring
+            'time_window' => 60,             // 60 second rolling window
+        ],
+        'rawg' => [
+            'failure_rate_threshold' => 50,
+            'interval_to_half_open' => 30,
+            'minimum_requests' => 10,
+            'time_window' => 60,
+        ],
+    ],
+];
+```
+
+**Step 3: Create GaneshaService**
+
+Create `backend/app/Services/CircuitBreaker/GaneshaService.php`:
+```php
+<?php
+
+namespace App\Services\CircuitBreaker;
+
+use Ackintosh\Ganesha;
+use Ackintosh\Ganesha\Builder;
+use Ackintosh\Ganesha\GuzzleMiddleware;
+use Ackintosh\Ganesha\Storage\Adapter\Redis;
+use GuzzleHttp\Client;
+use GuzzleHttp\HandlerStack;
+
+class GaneshaService
+{
+    private array $ganeshas = [];
+
+    public function getHttpClient(string $serviceName): Client
+    {
+        $ganesha = $this->getGanesha($serviceName);
+
+        $stack = HandlerStack::create();
+        $stack->push(new GuzzleMiddleware($ganesha));
+
+        return new Client(['handler' => $stack]);
+    }
+
+    public function isAvailable(string $serviceName): bool
+    {
+        return $this->getGanesha($serviceName)->isAvailable($serviceName);
+    }
+
+    public function getStatus(string $serviceName): string
+    {
+        $ganesha = $this->getGanesha($serviceName);
+        return $ganesha->isAvailable($serviceName) ? 'closed' : 'open';
+    }
+
+    private function getGanesha(string $serviceName): Ganesha
+    {
+        if (!isset($this->ganeshas[$serviceName])) {
+            $config = config("ganesha.services.$serviceName");
+
+            $redis = new \Redis();
+            $redis->connect(
+                config('ganesha.redis.host'),
+                config('ganesha.redis.port')
+            );
+
+            $this->ganeshas[$serviceName] = Builder::withRateStrategy()
+                ->adapter(new Redis($redis))
+                ->failureRateThreshold($config['failure_rate_threshold'])
+                ->intervalToHalfOpen($config['interval_to_half_open'])
+                ->minimumRequests($config['minimum_requests'])
+                ->timeWindow($config['time_window'])
+                ->build();
+        }
+
+        return $this->ganeshas[$serviceName];
+    }
+}
+```
+
+**Step 4: Register in AppServiceProvider**
+
+Add to `backend/app/Providers/AppServiceProvider.php`:
+```php
+use App\Services\CircuitBreaker\GaneshaService;
+
+public function register(): void
+{
+    $this->app->singleton(GaneshaService::class);
+}
+```
+
+**Step 5: Commit**
+
+```bash
+git add .
+git commit -m "feat: add Ganesha circuit breaker service"
 ```
 
 ---
@@ -250,17 +379,20 @@ Create `backend/app/Services/Media/Providers/TmdbProvider.php`:
 
 namespace App\Services\Media\Providers;
 
+use App\Exceptions\ApiException;
+use App\Services\CircuitBreaker\GaneshaService;
 use App\Services\Media\Contracts\MediaProviderInterface;
 use App\Services\Media\DTOs\MediaItem;
 use App\Services\Media\DTOs\PaginatedResults;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
 class TmdbProvider implements MediaProviderInterface
 {
     private string $baseUrl;
     private string $apiKey;
     private string $imageBaseUrl;
+    private GaneshaService $ganeshaService;
 
     public function __construct(
         private string $type = 'movie'
@@ -268,6 +400,7 @@ class TmdbProvider implements MediaProviderInterface
         $this->baseUrl = config('media.tmdb.base_url');
         $this->apiKey = config('media.tmdb.api_key');
         $this->imageBaseUrl = config('media.tmdb.image_base_url');
+        $this->ganeshaService = app(GaneshaService::class);
     }
 
     public function getType(): string
@@ -282,13 +415,25 @@ class TmdbProvider implements MediaProviderInterface
         return Cache::remember($cacheKey, config('media.cache_ttl.search'), function () use ($query, $page) {
             $endpoint = $this->type === 'movie' ? '/search/movie' : '/search/tv';
 
-            $response = Http::get($this->baseUrl . $endpoint, [
-                'api_key' => $this->apiKey,
-                'query' => $query,
-                'page' => $page,
-            ]);
+            try {
+                $client = $this->ganeshaService->getHttpClient('tmdb');
+                $response = $client->get($this->baseUrl . $endpoint, [
+                    'query' => [
+                        'api_key' => $this->apiKey,
+                        'query' => $query,
+                        'page' => $page,
+                    ],
+                ]);
 
-            $data = $response->json();
+                $data = json_decode($response->getBody()->getContents(), true);
+            } catch (RequestException $e) {
+                // Circuit is open or request failed - return empty results
+                throw new ApiException(
+                    'SERVICE_UNAVAILABLE',
+                    'TMDB service is temporarily unavailable.',
+                    503
+                );
+            }
 
             $items = array_map(
                 fn ($item) => $this->mapToMediaItem($item),
@@ -312,15 +457,17 @@ class TmdbProvider implements MediaProviderInterface
         return Cache::remember($cacheKey, config('media.cache_ttl.details'), function () use ($id) {
             $endpoint = $this->type === 'movie' ? "/movie/$id" : "/tv/$id";
 
-            $response = Http::get($this->baseUrl . $endpoint, [
-                'api_key' => $this->apiKey,
-            ]);
+            try {
+                $client = $this->ganeshaService->getHttpClient('tmdb');
+                $response = $client->get($this->baseUrl . $endpoint, [
+                    'query' => ['api_key' => $this->apiKey],
+                ]);
 
-            if ($response->failed()) {
+                $data = json_decode($response->getBody()->getContents(), true);
+                return $this->mapToMediaItem($data);
+            } catch (RequestException $e) {
                 return null;
             }
-
-            return $this->mapToMediaItem($response->json());
         });
     }
 
@@ -435,21 +582,25 @@ Create `backend/app/Services/Media/Providers/RawgProvider.php`:
 
 namespace App\Services\Media\Providers;
 
+use App\Exceptions\ApiException;
+use App\Services\CircuitBreaker\GaneshaService;
 use App\Services\Media\Contracts\MediaProviderInterface;
 use App\Services\Media\DTOs\MediaItem;
 use App\Services\Media\DTOs\PaginatedResults;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
 class RawgProvider implements MediaProviderInterface
 {
     private string $baseUrl;
     private string $apiKey;
+    private GaneshaService $ganeshaService;
 
     public function __construct()
     {
         $this->baseUrl = config('media.rawg.base_url');
         $this->apiKey = config('media.rawg.api_key');
+        $this->ganeshaService = app(GaneshaService::class);
     }
 
     public function getType(): string
@@ -463,14 +614,26 @@ class RawgProvider implements MediaProviderInterface
         $pageSize = 20;
 
         return Cache::remember($cacheKey, config('media.cache_ttl.search'), function () use ($query, $page, $pageSize) {
-            $response = Http::get($this->baseUrl . '/games', [
-                'key' => $this->apiKey,
-                'search' => $query,
-                'page' => $page,
-                'page_size' => $pageSize,
-            ]);
+            try {
+                $client = $this->ganeshaService->getHttpClient('rawg');
+                $response = $client->get($this->baseUrl . '/games', [
+                    'query' => [
+                        'key' => $this->apiKey,
+                        'search' => $query,
+                        'page' => $page,
+                        'page_size' => $pageSize,
+                    ],
+                ]);
 
-            $data = $response->json();
+                $data = json_decode($response->getBody()->getContents(), true);
+            } catch (RequestException $e) {
+                throw new ApiException(
+                    'SERVICE_UNAVAILABLE',
+                    'RAWG service is temporarily unavailable.',
+                    503
+                );
+            }
+
             $totalResults = $data['count'] ?? 0;
 
             $items = array_map(
@@ -493,15 +656,17 @@ class RawgProvider implements MediaProviderInterface
         $cacheKey = "media:rawg:item:$id";
 
         return Cache::remember($cacheKey, config('media.cache_ttl.details'), function () use ($id) {
-            $response = Http::get($this->baseUrl . "/games/$id", [
-                'key' => $this->apiKey,
-            ]);
+            try {
+                $client = $this->ganeshaService->getHttpClient('rawg');
+                $response = $client->get($this->baseUrl . "/games/$id", [
+                    'query' => ['key' => $this->apiKey],
+                ]);
 
-            if ($response->failed()) {
+                $data = json_decode($response->getBody()->getContents(), true);
+                return $this->mapToMediaItem($data);
+            } catch (RequestException $e) {
                 return null;
             }
-
-            return $this->mapToMediaItem($response->json());
         });
     }
 
@@ -1779,9 +1944,10 @@ git commit -m "chore: phase 3 complete - election system"
 ## Phase 3 Completion Checklist
 
 - [ ] Election and media config files
+- [ ] Circuit breaker setup (Ganesha)
 - [ ] Media provider interface and DTOs
-- [ ] TMDB provider (movies & TV shows)
-- [ ] RAWG provider (video games)
+- [ ] TMDB provider (movies & TV shows, with Ganesha)
+- [ ] RAWG provider (video games, with Ganesha)
 - [ ] MediaSearchService facade
 - [ ] Media search endpoints
 - [ ] ElectionService with create/close logic

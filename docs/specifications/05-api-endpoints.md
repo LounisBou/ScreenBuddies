@@ -1045,6 +1045,18 @@ Search external APIs for media.
 }
 ```
 
+**Error (503) - Circuit Breaker Open:**
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "TMDB service is temporarily unavailable."
+  }
+}
+```
+
+> **Note:** External APIs (TMDB, RAWG) are protected by a circuit breaker. If an API is experiencing issues, the circuit opens and requests fail fast with 503. See `docs/circuit-breaker.md` for details.
+
 ---
 
 ### GET /media/{type}/{external_id}

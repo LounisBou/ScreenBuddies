@@ -16,6 +16,7 @@ RESTful API built with Laravel, using modern PHP practices and Laravel conventio
 | Cache | Redis | Latest |
 | Queue | Redis / Database | - |
 | Auth | Laravel Sanctum | Latest |
+| Circuit Breaker | ackintosh/ganesha | Latest |
 | API Docs | Scribe or Scramble | Latest |
 | Testing | PHPUnit + Pest | Latest |
 
@@ -106,6 +107,9 @@ app/
     │   ├── TokenService.php            # Sanctum token management
     │   └── PasswordResetService.php
     │
+    ├── CircuitBreaker/
+    │   └── GaneshaService.php         # Circuit breaker for external APIs
+    │
     ├── Election/
     │   ├── ElectionService.php
     │   ├── DuelGeneratorService.php
@@ -116,9 +120,9 @@ app/
     │   ├── Contracts/
     │   │   └── MediaProviderInterface.php
     │   └── Providers/
-    │       ├── TmdbProvider.php       # Movies & TV Shows
-    │       ├── RawgProvider.php       # Video Games
-    │       └── BggProvider.php        # Board Games
+    │       ├── TmdbProvider.php       # Movies & TV Shows (with Ganesha)
+    │       ├── RawgProvider.php       # Video Games (with Ganesha)
+    │       └── BggProvider.php        # Board Games (with Ganesha)
     │
     └── Notification/
         ├── EmailService.php
@@ -127,6 +131,7 @@ app/
 config/
 ├── sanctum.php                        # Token expiration, etc.
 ├── media.php                          # API keys, rate limits
+├── ganesha.php                        # Circuit breaker settings
 └── election.php                       # Business rules (limits, etc.)
 
 database/
@@ -245,6 +250,44 @@ class MediaItem
     public array $metadata; // Provider-specific data
 }
 ```
+
+### Circuit Breaker (Ganesha)
+
+All external API calls (TMDB, RAWG, BGG) are wrapped with a circuit breaker using `ackintosh/ganesha`.
+
+> **Full documentation:** See `docs/circuit-breaker.md` for detailed explanation of states, configuration, and error handling.
+
+**States:**
+- **Closed** (normal): Requests pass through, failures are counted
+- **Open** (failing): Requests fail fast, return cached results or graceful error
+- **Half-Open** (testing): Allow one request to test if service recovered
+
+**Configuration (`config/ganesha.php`):**
+```php
+return [
+    'adapter' => 'redis',
+    'redis' => [
+        'host' => env('REDIS_HOST', '127.0.0.1'),
+        'port' => env('REDIS_PORT', 6379),
+    ],
+    'services' => [
+        'tmdb' => [
+            'failure_rate_threshold' => 50,  // Open at 50% failure
+            'interval_to_half_open' => 30,   // Try again after 30s
+            'minimum_requests' => 10,        // Need 10 requests before measuring
+            'time_window' => 60,             // 60s rolling window
+        ],
+        'rawg' => [
+            'failure_rate_threshold' => 50,
+            'interval_to_half_open' => 30,
+            'minimum_requests' => 10,
+            'time_window' => 60,
+        ],
+    ],
+];
+```
+
+**Integration:** Ganesha Guzzle Middleware wraps all HTTP calls transparently.
 
 ### CondorcetService
 
@@ -378,6 +421,7 @@ class DuelGeneratorService
 | PAIR_ALREADY_VOTED | 400 | This pair already voted on |
 | CANDIDATE_LIMIT_REACHED | 400 | Max 30 candidates |
 | EMAIL_NOT_VERIFIED | 403 | Action requires verified email |
+| SERVICE_UNAVAILABLE | 503 | External API unavailable (circuit open) |
 
 ---
 

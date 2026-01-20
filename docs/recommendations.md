@@ -187,10 +187,16 @@ Implement **circuit breaker pattern** for all external API calls.
 - Affects: Phase 3 (media providers)
 - Effort: Medium
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [x] Accept  [ ] Reject  [ ] Modify
 
 **Notes:**
-_To be filled during review_
+- Accepted on 2026-01-20
+- Implementation: **ackintosh/ganesha** package
+- Guzzle Middleware for transparent integration with TMDB/RAWG HTTP calls
+- Storage: Redis (already planned for token caching)
+- States: Closed (normal) → Open (failing) → Half-Open (testing)
+- When open: return cached results or graceful error immediately
+- Full documentation: `docs/circuit-breaker.md`
 
 ---
 
@@ -591,7 +597,7 @@ _To be filled during review_
 | R1 | Switch to Laravel Sanctum | High | Medium | Pending |
 | R2 | Commit to PostgreSQL | High | Low | Pending |
 | R3 | Add Skip option to duels | High | Low-Med | Pending |
-| R4 | Add circuit breaker for APIs | High | Medium | Pending |
+| R4 | Add circuit breaker for APIs | High | Medium | Accepted |
 | R5 | Define infrastructure plan | High | Med-High | Pending |
 | R6 | Reconsider Flutter Web | Medium | Varies | Pending |
 | R7 | Make MIN_PAIR_DUELS dynamic | Medium | Low | Pending |
@@ -610,4 +616,5 @@ _To be filled during review_
 | 2026-01-20 | R1: Switch to Sanctum | **Accepted** | Redis cache for future scaling if needed |
 | 2026-01-20 | R2: Commit to PostgreSQL | **Accepted** | Better JSON/jsonb support, GIN indexes |
 | 2026-01-20 | R3: Add Skip to Duels | **Accepted** | No skip limit, store as null in JSON |
+| 2026-01-20 | R4: Circuit Breaker | **Accepted** | Using ackintosh/ganesha with Guzzle Middleware |
 
