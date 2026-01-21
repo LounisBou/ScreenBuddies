@@ -483,10 +483,15 @@ dependencies:
 - Affects: Phase 1 (backend), Phase 5 (Flutter)
 - Effort: Low
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [x] Implemented via R5
 
 **Notes:**
-_To be filled during review_
+- Implemented on 2026-01-21 (already covered by R5 Infrastructure)
+- Sentry fully documented in `docs/infrastructure.md`
+- Implementation in Phase 0 (Task 4: Setup Sentry Error Monitoring)
+- Backend: `sentry/sentry-laravel`
+- Flutter: `sentry_flutter`
+- Free tier (5K errors/month) to start
 
 ---
 
@@ -644,7 +649,7 @@ _To be filled during review_
 | R6 | Reconsider Flutter Web | Medium | Varies | Keep Flutter Web |
 | R7 | Confidence interval reliability rule | Medium | Low-Med | Accepted |
 | R8 | Remove BGG and Theater | Medium | Low | Deferred |
-| R9 | Add Sentry error monitoring | Medium | Low | Pending |
+| R9 | Add Sentry error monitoring | Medium | Low | Implemented (R5) |
 | R10 | Add offline support | Low | Med-High | Pending |
 | R11 | Shorten refresh token | Low | Low | Pending |
 | R12 | Add JSON schema validation | Low | Low | Pending |
@@ -663,4 +668,5 @@ _To be filled during review_
 | 2026-01-21 | R6: Flutter Web | **Keep Flutter Web** | Mobile first, web fallback, no SEO, single codebase |
 | 2026-01-21 | R7: Confidence Interval Rule | **Accepted** | Replace fixed MIN_PAIR_DUELS with statistical reliability |
 | 2026-01-21 | R8: BGG and Theater | **Deferred** | Keep as placeholders, added to future-ideas.md |
+| 2026-01-21 | R9: Sentry Monitoring | **Implemented (R5)** | Already covered by Phase 0 Infrastructure |
 
