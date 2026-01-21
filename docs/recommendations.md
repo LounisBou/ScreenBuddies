@@ -639,10 +639,13 @@ public function setVotesAttribute(array $votes): void
 - Affects: Phase 1 (Voter model), Phase 4 (voting)
 - Effort: Low
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [x] Accept  [ ] Reject  [ ] Modify
 
 **Notes:**
-_To be filled during review_
+- Accepted on 2026-01-21
+- Add validation in `Voter` model mutator (`setVotesAttribute`)
+- Validates: key format, smaller_larger ordering, winner in pair or null
+- Fail fast on invalid data, protect Condorcet algorithm
 
 ---
 
@@ -661,7 +664,7 @@ _To be filled during review_
 | R9 | Add Sentry error monitoring | Medium | Low | Implemented (R5) |
 | R10 | Add offline support | Low | Med-High | Accepted |
 | R11 | Shorten refresh token | Low | Low | Deferred |
-| R12 | Add JSON schema validation | Low | Low | Pending |
+| R12 | Add JSON schema validation | Low | Low | Accepted |
 
 ---
 
@@ -680,4 +683,5 @@ _To be filled during review_
 | 2026-01-21 | R9: Sentry Monitoring | **Implemented (R5)** | Already covered by Phase 0 Infrastructure |
 | 2026-01-21 | R10: Offline Support | **Accepted** | Read-only offline mode with Hive caching |
 | 2026-01-21 | R11: Refresh Token | **Deferred** | Keep 7-day token for now, shorten later if needed |
+| 2026-01-21 | R12: JSON Schema Validation | **Accepted** | Voter model mutator validates votes JSON structure |
 

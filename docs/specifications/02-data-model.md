@@ -236,6 +236,12 @@ Stores duel results as key-value pairs where key is `{smaller_id}_{larger_id}` a
 - Missing key = duel not yet presented
 - Skipped duels (`null`) are ignored in ranking calculations
 
+**Validation (enforced by model mutator):**
+- Key format must match `^\d+_\d+$` (e.g., `"1_3"`)
+- Key ordering: first ID must be smaller than second (e.g., `"1_3"` not `"3_1"`)
+- Winner value must be one of the pair's candidate IDs, or `null` for skip
+- Invalid data throws `InvalidArgumentException` at write time
+
 **Scale benefit:** Instead of 435 rows per voter (for 30 candidates), stores 1 row with ~4KB JSON.
 
 **Aggregation for Condorcet:**

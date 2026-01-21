@@ -1063,6 +1063,26 @@ test('voter has votes JSON and duel_count', function () {
     expect($voter->getCasts())->toHaveKey('votes');
     expect($voter->getFillable())->toContain('duel_count');
 });
+
+test('voter validates votes JSON format', function () {
+    $voter = new Voter();
+
+    // Valid votes
+    $voter->votes = ['1_3' => 1, '2_5' => null];
+    expect($voter->votes)->toHaveKey('1_3');
+
+    // Invalid key format
+    expect(fn() => $voter->votes = ['abc' => 1])
+        ->toThrow(InvalidArgumentException::class);
+
+    // Invalid key ordering (larger_smaller)
+    expect(fn() => $voter->votes = ['3_1' => 1])
+        ->toThrow(InvalidArgumentException::class);
+
+    // Invalid winner (not in pair)
+    expect(fn() => $voter->votes = ['1_3' => 5])
+        ->toThrow(InvalidArgumentException::class);
+});
 ```
 
 **Step 2: Run test to verify it fails**
@@ -1147,6 +1167,34 @@ class Voter extends Model
             'joined_at' => 'datetime',
             'completed' => 'boolean',
         ];
+    }
+
+    /**
+     * Validate and set votes JSON.
+     *
+     * @throws \InvalidArgumentException if votes format is invalid
+     */
+    public function setVotesAttribute(array $votes): void
+    {
+        foreach ($votes as $key => $winnerId) {
+            // 1. Validate key format (digits_digits)
+            if (!preg_match('/^\d+_\d+$/', $key)) {
+                throw new \InvalidArgumentException("Invalid vote key format: $key");
+            }
+
+            // 2. Validate smaller_larger ordering
+            [$a, $b] = explode('_', $key);
+            if ((int)$a >= (int)$b) {
+                throw new \InvalidArgumentException("Vote key must be smaller_larger: $key");
+            }
+
+            // 3. Validate winner is one of the pair (or null for skip)
+            if ($winnerId !== null && $winnerId != $a && $winnerId != $b) {
+                throw new \InvalidArgumentException("Winner must be one of the candidates in pair $key: got $winnerId");
+            }
+        }
+
+        $this->attributes['votes'] = json_encode($votes);
     }
 
     public function election(): BelongsTo

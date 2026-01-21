@@ -110,21 +110,16 @@ This document tracks potential features, improvements, and ideas for future vers
 
 ### JSON Schema Validation for Votes
 
-**Status:** Not implemented
+**Status:** ✅ **ACCEPTED** (R12 - implemented in Phase 1)
 
-**Concept:**
-- Validate `Voter.votes` JSON structure in model mutator
-- Ensure keys follow `{smaller}_{larger}` format
-- Validate winner IDs are valid candidates
-- Catch data corruption early
+> This feature has been moved from future ideas to the implementation plan.
+> See `docs/plans/phase-1-backend-foundation.md` Task 9 for the Voter model with validation.
 
-**Benefits:**
-- Data integrity guaranteed
-- Bugs caught at write time
-- Clearer error messages
-
-**References:**
-- See R12 in `recommendations.md`
+**Summary:**
+- Validation in `Voter` model `setVotesAttribute` mutator
+- Keys must follow `{smaller}_{larger}` format
+- Winner must be one of the pair's candidate IDs or `null` (skip)
+- Invalid data throws `InvalidArgumentException` at write time
 
 ---
 

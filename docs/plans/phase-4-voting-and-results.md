@@ -14,8 +14,10 @@
 **Data Model:**
 ```
 Voter.votes JSON format: {"1_2": 1, "1_3": 3, "2_3": 2, ...}
-Key = "{smaller_id}_{larger_id}", Value = winner's candidate ID
+Key = "{smaller_id}_{larger_id}", Value = winner's candidate ID or null (skip)
 ```
+
+> **Note:** Votes JSON is validated by the `Voter` model mutator (see Phase 1). Invalid key formats, wrong ordering, or invalid winner values throw `InvalidArgumentException`.
 
 **Tech Stack:** Laravel 11, Laravel Scheduler, Pest
 
