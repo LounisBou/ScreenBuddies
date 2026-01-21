@@ -826,7 +826,6 @@ test('aggregates votes from multiple voters', function () {
 });
 
 test('calculates rankings correctly using Ranked Pairs', function () {
-    $user = User::factory()->create();
     $election = Election::factory()->create([
         'media_type_id' => $this->mediaType->id,
         'winner_count' => 2,
@@ -836,18 +835,22 @@ test('calculates rankings correctly using Ranked Pairs', function () {
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
     $c3 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:3', 'title' => 'Movie 3']);
 
-    // Clear ranking: C1 > C2 > C3
-    Voter::create([
-        'election_id' => $election->id,
-        'user_id' => $user->id,
-        'joined_at' => now(),
-        'votes' => [
-            "{$c1->id}_{$c2->id}" => $c1->id,
-            "{$c1->id}_{$c3->id}" => $c1->id,
-            "{$c2->id}_{$c3->id}" => $c2->id,
-        ],
-        'duel_count' => 3,
-    ]);
+    // Create 10 voters with strong, clear ranking: C1 > C2 > C3
+    // (strong margins ensure statistical reliability)
+    for ($i = 0; $i < 10; $i++) {
+        $user = User::factory()->create();
+        Voter::create([
+            'election_id' => $election->id,
+            'user_id' => $user->id,
+            'joined_at' => now(),
+            'votes' => [
+                "{$c1->id}_{$c2->id}" => $c1->id,  // C1 beats C2 (unanimous)
+                "{$c1->id}_{$c3->id}" => $c1->id,  // C1 beats C3 (unanimous)
+                "{$c2->id}_{$c3->id}" => $c2->id,  // C2 beats C3 (unanimous)
+            ],
+            'duel_count' => 3,
+        ]);
+    }
 
     $service = new CondorcetService();
     $rankings = $service->calculateRankings($election);
@@ -857,8 +860,7 @@ test('calculates rankings correctly using Ranked Pairs', function () {
     expect($rankings[2]['candidate']->id)->toBe($c3->id);
 });
 
-test('gets top K winners', function () {
-    $user = User::factory()->create();
+test('gets top K winners with statistically reliable data', function () {
     $election = Election::factory()->create([
         'media_type_id' => $this->mediaType->id,
         'winner_count' => 1,
@@ -867,19 +869,72 @@ test('gets top K winners', function () {
     $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
     $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
 
-    Voter::create([
-        'election_id' => $election->id,
-        'user_id' => $user->id,
-        'joined_at' => now(),
-        'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],
-        'duel_count' => 1,
-    ]);
+    // Create 10 voters, 8 prefer C1 (strong margin for reliability)
+    for ($i = 0; $i < 8; $i++) {
+        $user = User::factory()->create();
+        Voter::create([
+            'election_id' => $election->id,
+            'user_id' => $user->id,
+            'joined_at' => now(),
+            'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],
+            'duel_count' => 1,
+        ]);
+    }
+    for ($i = 0; $i < 2; $i++) {
+        $user = User::factory()->create();
+        Voter::create([
+            'election_id' => $election->id,
+            'user_id' => $user->id,
+            'joined_at' => now(),
+            'votes' => ["{$c1->id}_{$c2->id}" => $c2->id],
+            'duel_count' => 1,
+        ]);
+    }
 
     $service = new CondorcetService();
     $winners = $service->getWinners($election);
 
     expect($winners)->toHaveCount(1);
     expect($winners[0]['candidate']->id)->toBe($c1->id);
+});
+
+test('ignores pairs that are not statistically reliable', function () {
+    $election = Election::factory()->create([
+        'media_type_id' => $this->mediaType->id,
+        'winner_count' => 1,
+    ]);
+
+    $c1 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:1', 'title' => 'Movie 1']);
+    $c2 = Candidate::create(['election_id' => $election->id, 'external_id' => 'tmdb:2', 'title' => 'Movie 2']);
+
+    // Only 3 votes: 2-1 margin is NOT statistically reliable (CI crosses 0.5)
+    for ($i = 0; $i < 2; $i++) {
+        $user = User::factory()->create();
+        Voter::create([
+            'election_id' => $election->id,
+            'user_id' => $user->id,
+            'joined_at' => now(),
+            'votes' => ["{$c1->id}_{$c2->id}" => $c1->id],
+            'duel_count' => 1,
+        ]);
+    }
+    $user = User::factory()->create();
+    Voter::create([
+        'election_id' => $election->id,
+        'user_id' => $user->id,
+        'joined_at' => now(),
+        'votes' => ["{$c1->id}_{$c2->id}" => $c2->id],
+        'duel_count' => 1,
+    ]);
+
+    $service = new CondorcetService();
+
+    // With only a 2-1 margin, confidence interval includes 0.5
+    // So no edges should be created, meaning no clear winner
+    $rankings = $service->calculateRankings($election);
+
+    // Both candidates tied (no reliable edges)
+    expect($rankings[0]['score'])->toBe($rankings[1]['score']);
 });
 ```
 
@@ -909,7 +964,31 @@ use Illuminate\Support\Facades\Cache;
 class CondorcetService
 {
     private const ALPHA = 1;           // Beta prior (Laplace smoothing)
-    private const MIN_PAIR_DUELS = 5;  // Minimum data before trusting a pair
+    private const Z_CONFIDENCE = 1.96; // z-score for 95% confidence (1.28 for 80%)
+
+    /**
+     * Check if a pair is statistically reliable using confidence interval rule.
+     * A pair is reliable if the confidence interval excludes 0.5.
+     *
+     * @see docs/condorcet-implementation.md for full explanation
+     */
+    private function isPairReliable(int $wins, int $losses): bool
+    {
+        $n = $wins + $losses;
+
+        if ($n === 0) {
+            return false;
+        }
+
+        $p_hat = $wins / $n;
+        $se = sqrt($p_hat * (1 - $p_hat) / $n);
+
+        $lcb = $p_hat - self::Z_CONFIDENCE * $se;
+        $ucb = $p_hat + self::Z_CONFIDENCE * $se;
+
+        // Reliable if CI doesn't cross 0.5
+        return ($lcb > 0.5) || ($ucb < 0.5);
+    }
 
     /**
      * Build preference graph by aggregating all voters' JSON votes.
@@ -1085,8 +1164,10 @@ class CondorcetService
                 $wins_ba = $graph[$b][$a];
                 $n = $wins_ab + $wins_ba;
 
-                if ($n < self::MIN_PAIR_DUELS) {
-                    // Not enough data, skip this pair
+                // Check statistical reliability using confidence interval rule
+                // (replaces fixed MIN_PAIR_DUELS threshold)
+                if (!$this->isPairReliable($wins_ab, $wins_ba)) {
+                    // Confidence interval crosses 0.5, skip this pair
                     continue;
                 }
 

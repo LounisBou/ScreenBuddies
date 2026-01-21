@@ -1047,6 +1047,7 @@ class ElectionCard extends StatelessWidget {
         return Icons.tv;
       case 'videogame':
         return Icons.sports_esports;
+      // Placeholders for future media types (see docs/future-ideas.md)
       case 'boardgame':
         return Icons.extension;
       case 'theater':

@@ -1094,7 +1094,9 @@ Get detailed media info.
 
 **Auth:** Required
 
-List available media types.
+List available media types. Only returns media types where `is_active = true`.
+
+> **Note:** Board Game and Theater are placeholders (`is_active = false`) until fully implemented. See `docs/future-ideas.md`.
 
 **Response (200):**
 ```json
@@ -1111,14 +1113,6 @@ List available media types.
     {
       "code": "videogame",
       "label": "Video Game"
-    },
-    {
-      "code": "boardgame",
-      "label": "Board Game"
-    },
-    {
-      "code": "theater",
-      "label": "Theater"
     }
   ]
 }

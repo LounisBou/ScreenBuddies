@@ -4,7 +4,7 @@
 
 **Goal:** Implement election creation, candidate management, join election system, and media search integration.
 
-**Architecture:** ElectionService handles business logic. MediaSearchService provides unified interface for external APIs (TMDB, RAWG, BGG). Join system via `invite_token` on Election.
+**Architecture:** ElectionService handles business logic. MediaSearchService provides unified interface for external APIs (TMDB, RAWG). BGG is a placeholder for future Board Game support. Join system via `invite_token` on Election.
 
 **Tech Stack:** Laravel 11, Guzzle HTTP, Laravel Cache, API Resources, ackintosh/ganesha (Circuit Breaker)
 
@@ -53,6 +53,7 @@ return [
         'api_key' => env('RAWG_API_KEY'),
         'base_url' => 'https://api.rawg.io/api',
     ],
+    // Placeholder for future Board Game support (see docs/future-ideas.md)
     'bgg' => [
         'base_url' => 'https://boardgamegeek.com/xmlapi2',
     ],
@@ -788,7 +789,7 @@ class MediaSearchService
             'movie' => new TmdbProvider('movie'),
             'tvshow' => new TmdbProvider('tvshow'),
             'videogame' => new RawgProvider(),
-            // 'boardgame' => new BggProvider(), // TODO: implement
+            // Placeholder: 'boardgame' => new BggProvider(), // See docs/future-ideas.md
         ];
     }
 

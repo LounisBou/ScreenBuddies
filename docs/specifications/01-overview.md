@@ -24,13 +24,15 @@ ScreenBuddies helps groups of friends decide what to watch or play together. Ins
 
 All types share identical voting behavior. Only the data source differs.
 
-| Type | Data Source |
-|------|-------------|
-| Movie | TMDB API |
-| TV Show | TMDB API |
-| Video Game | RAWG API |
-| Board Game | BoardGameGeek API |
-| Theater | TBD (scraping/API) |
+| Type | Data Source | Status |
+|------|-------------|--------|
+| Movie | TMDB API | ✅ Ready |
+| TV Show | TMDB API | ✅ Ready |
+| Video Game | RAWG API | ✅ Ready |
+| Board Game | BoardGameGeek API | ⚠️ Placeholder |
+| Theater | TBD | ⚠️ No API identified |
+
+> **Note:** Board Game and Theater are placeholders for future implementation. See `docs/future-ideas.md` for details.
 
 ---
 

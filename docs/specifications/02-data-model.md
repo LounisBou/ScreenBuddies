@@ -302,9 +302,11 @@ CREATE UNIQUE INDEX idx_user_preference_user ON user_preference(user_id);
 
 ### API Source (Media Type)
 
-| Value | Description |
-|-------|-------------|
-| tmdb | The Movie Database (movies, TV shows) |
-| rawg | RAWG API (video games) |
-| bgg | BoardGameGeek (board games) |
-| custom | Manual/custom entries |
+| Value | Description | Status |
+|-------|-------------|--------|
+| tmdb | The Movie Database (movies, TV shows) | ✅ Ready |
+| rawg | RAWG API (video games) | ✅ Ready |
+| bgg | BoardGameGeek (board games) | ⚠️ Placeholder |
+| custom | Manual/custom entries (theater, etc.) | ⚠️ Future |
+
+> **Note:** `bgg` and `custom` are placeholders. Board Game and Theater media types will have `is_active = false` until implementation is complete. See `docs/future-ideas.md`.

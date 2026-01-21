@@ -387,7 +387,7 @@ class ApiClient {
 
 ```
 ┌──────────────┐
-│ Select Type  │ Movie / TV Show / Video Game / Board Game / Theater
+│ Select Type  │ Movie / TV Show / Video Game (+ future: Board Game, Theater)
 └──────┬───────┘
        │
        ▼

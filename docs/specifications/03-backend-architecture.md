@@ -122,7 +122,7 @@ app/
     │   └── Providers/
     │       ├── TmdbProvider.php       # Movies & TV Shows (with Ganesha)
     │       ├── RawgProvider.php       # Video Games (with Ganesha)
-    │       └── BggProvider.php        # Board Games (with Ganesha)
+    │       └── BggProvider.php        # Board Games (placeholder, see future-ideas.md)
     │
     └── Notification/
         ├── EmailService.php
@@ -253,7 +253,7 @@ class MediaItem
 
 ### Circuit Breaker (Ganesha)
 
-All external API calls (TMDB, RAWG, BGG) are wrapped with a circuit breaker using `ackintosh/ganesha`.
+All external API calls (TMDB, RAWG) are wrapped with a circuit breaker using `ackintosh/ganesha`. BGG will use the same pattern when implemented (currently placeholder).
 
 > **Full documentation:** See `docs/circuit-breaker.md` for detailed explanation of states, configuration, and error handling.
 
@@ -467,7 +467,7 @@ MAIL_HOST=smtp.mailgun.org
 # External APIs
 TMDB_API_KEY=your-key
 RAWG_API_KEY=your-key
-BGG_API_URL=https://boardgamegeek.com/xmlapi2
+BGG_API_URL=https://boardgamegeek.com/xmlapi2  # Placeholder for future use
 
 # Push Notifications
 FCM_SERVER_KEY=your-key

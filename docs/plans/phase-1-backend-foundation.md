@@ -1301,26 +1301,33 @@ class MediaTypeSeeder extends Seeder
                 'code' => 'movie',
                 'label' => 'media_type.movie',
                 'api_source' => 'tmdb',
+                'is_active' => true,
             ],
             [
                 'code' => 'tvshow',
                 'label' => 'media_type.tvshow',
                 'api_source' => 'tmdb',
+                'is_active' => true,
             ],
             [
                 'code' => 'videogame',
                 'label' => 'media_type.videogame',
                 'api_source' => 'rawg',
+                'is_active' => true,
             ],
+            // Placeholders - set is_active = false until implementation complete
+            // See docs/future-ideas.md for details
             [
                 'code' => 'boardgame',
                 'label' => 'media_type.boardgame',
                 'api_source' => 'bgg',
+                'is_active' => false,  // Placeholder
             ],
             [
                 'code' => 'theater',
                 'label' => 'media_type.theater',
                 'api_source' => 'custom',
+                'is_active' => false,  // Placeholder
             ],
         ];
 

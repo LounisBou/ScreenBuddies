@@ -317,47 +317,76 @@ Choose one of these strategies:
 
 ---
 
-### R7: Make MIN_PAIR_DUELS Dynamic
+### R7: Replace Fixed MIN_PAIR_DUELS with Confidence Interval Rule
 
 **Current State:**
 `MIN_PAIR_DUELS = 5` is a constant. Pairs with fewer than 5 votes are ignored in rankings.
 
 **Problem:**
+- Fixed threshold ignores **margin strength** — a 10-2 result is highly reliable, a 6-5 result is not
 - With 3 voters, no pair will ever reach 5 votes
 - Small elections (friends group) may not produce results
-- Algorithm assumes moderate-to-large voter counts
+- One-size-fits-all approach is statistically naive
 
 **Recommendation:**
-Make the threshold **dynamic** based on voter count:
+Replace the fixed threshold with a **Confidence Interval Crossing Rule**:
 
-```php
-$minPairDuels = max(2, min(5, floor($totalVoters / 2)));
+A pair (i,j) is **reliable** if and only if the confidence interval for the true win probability **excludes 0.5**.
+
+**Statistical Model:**
+- Each duel is a Bernoulli trial with unknown true probability P(i,j)
+- We observe: w_ij wins, w_ji losses, n = w_ij + w_ji total
+- Observed win rate: p̂ = w_ij / n
+
+**Reliability Formula (Normal Approximation):**
+
+```
+LCB = p̂ - z × √(p̂(1-p̂)/n)
+UCB = p̂ + z × √(p̂(1-p̂)/n)
 ```
 
-| Voters | Threshold |
-|--------|-----------|
-| 3-4    | 2         |
-| 5-6    | 2-3       |
-| 7-9    | 3-4       |
-| 10+    | 5         |
+Where:
+- `z = 1.96` for 95% confidence (recommended)
+- `z = 1.28` for 80% confidence (more permissive)
+
+**Reliability Condition:**
+```
+Pair is reliable ⟺ LCB > 0.5 OR UCB < 0.5
+```
+
+**How It Works:**
+
+| Observed Result | n | p̂ | LCB (95%) | Reliable? |
+|-----------------|---|-----|-----------|-----------|
+| 8-2 (strong) | 10 | 0.80 | 0.55 | ✅ Yes (LCB > 0.5) |
+| 6-4 (moderate) | 10 | 0.60 | 0.30 | ❌ No (crosses 0.5) |
+| 15-10 (moderate, more data) | 25 | 0.60 | 0.41 | ❌ No |
+| 18-7 (strong) | 25 | 0.72 | 0.54 | ✅ Yes |
+| 3-0 (strong, few) | 3 | 1.00 | 0.29 | ❌ No (need more data) |
 
 **Benefits:**
-- Works for small friend groups (3-5 people)
-- Still robust for larger elections
-- More flexible algorithm
+- **Adapts automatically**: Strong margins need fewer observations
+- **Statistically sound**: Based on confidence interval theory
+- **Works for all election sizes**: No arbitrary voter-count thresholds
+- **Self-calibrating**: Close races naturally require more data
 
 **Trade-offs:**
-- Less statistical confidence with small elections
-- Need to document limitations for small groups
+- Slightly more complex calculation
+- Need to choose confidence level (95% recommended)
+- Very close races may never become reliable (acceptable)
 
 **Implementation Impact:**
 - Affects: Phase 4 (CondorcetService)
-- Effort: Low
+- Effort: Low-Medium (formula change + documentation)
+- Full details: `docs/condorcet-implementation.md`
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [x] Accept  [ ] Reject  [ ] Modify
 
 **Notes:**
-_To be filled during review_
+- Accepted on 2026-01-21
+- **DO NOT** use fixed MIN_PAIR_DUELS; use confidence interval rule
+- Default confidence level: 95% (z = 1.96)
+- Full implementation details in `docs/condorcet-implementation.md`
 
 ---
 
@@ -399,10 +428,13 @@ Remove Board Game and Theater from:
 - Affects: Phase 1 (seeder), Phase 3 (providers), Phase 7 (creation UI)
 - Effort: Low (removal is easy)
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [ ] Accept  [ ] Reject  [x] Defer
 
 **Notes:**
-_To be filled during review_
+- Deferred on 2026-01-21
+- Keep BGG and Theater as placeholders for now
+- Added to `docs/future-ideas.md` for future consideration
+- Will revisit when there's user demand or better API options
 
 ---
 
@@ -610,8 +642,8 @@ _To be filled during review_
 | R4 | Add circuit breaker for APIs | High | Medium | Accepted |
 | R5 | Define infrastructure plan | High | Med-High | Modified |
 | R6 | Reconsider Flutter Web | Medium | Varies | Keep Flutter Web |
-| R7 | Make MIN_PAIR_DUELS dynamic | Medium | Low | Pending |
-| R8 | Remove BGG and Theater | Medium | Low | Pending |
+| R7 | Confidence interval reliability rule | Medium | Low-Med | Accepted |
+| R8 | Remove BGG and Theater | Medium | Low | Deferred |
 | R9 | Add Sentry error monitoring | Medium | Low | Pending |
 | R10 | Add offline support | Low | Med-High | Pending |
 | R11 | Shorten refresh token | Low | Low | Pending |
@@ -629,4 +661,6 @@ _To be filled during review_
 | 2026-01-20 | R4: Circuit Breaker | **Accepted** | Using ackintosh/ganesha with Guzzle Middleware |
 | 2026-01-20 | R5: Infrastructure | **Modified** | No Docker, Sentry free tier, Phase 0 created |
 | 2026-01-21 | R6: Flutter Web | **Keep Flutter Web** | Mobile first, web fallback, no SEO, single codebase |
+| 2026-01-21 | R7: Confidence Interval Rule | **Accepted** | Replace fixed MIN_PAIR_DUELS with statistical reliability |
+| 2026-01-21 | R8: BGG and Theater | **Deferred** | Keep as placeholders, added to future-ideas.md |
 

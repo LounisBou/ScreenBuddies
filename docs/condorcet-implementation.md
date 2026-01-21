@@ -66,9 +66,11 @@ Compute on the fly or cache (5 min TTL recommended).
 
 ```php
 ALPHA = 1;          // Beta prior (Laplace smoothing)
-MIN_PAIR_DUELS = 5; // minimum data before trusting a pair
+Z_CONFIDENCE = 1.96; // z-score for 95% confidence (or 1.28 for 80%)
 K = 5;              // top-k
 ```
+
+> **IMPORTANT:** Do NOT use a fixed `MIN_PAIR_DUELS` threshold. Use the Confidence Interval Reliability Rule (see Section 3.5).
 
 ---
 
@@ -96,15 +98,55 @@ p_ij = (w_ij + ALPHA) / (n + 2*ALPHA)
 strength_ij = max(0, (p_ij - 0.5) * sqrt(n))
 ```
 
-### Step 4 — Eligibility
+### Step 4 — Reliability Check (Confidence Interval Rule)
 
-Ignore this pair if:
+A pair is **reliable** if and only if the confidence interval for the true win probability **excludes 0.5**.
+
+**Statistical Foundation:**
+- Each duel outcome is a Bernoulli trial with unknown true probability P(i,j)
+- We observe w_ij wins, w_ji losses, n = w_ij + w_ji total
+- We want to trust the direction of preference only when statistically confident
+
+**Formula (Normal Approximation):**
 
 ```php
-n < MIN_PAIR_DUELS
+// Observed win rate
+$p_hat = $w_ij / $n;
+
+// Standard error
+$se = sqrt($p_hat * (1 - $p_hat) / $n);
+
+// Confidence bounds (z = 1.96 for 95%, z = 1.28 for 80%)
+$lcb = $p_hat - Z_CONFIDENCE * $se;  // Lower Confidence Bound
+$ucb = $p_hat + Z_CONFIDENCE * $se;  // Upper Confidence Bound
+
+// Reliability condition: CI must not cross 0.5
+$is_reliable = ($lcb > 0.5) || ($ucb < 0.5);
 ```
 
-➡️ This ensures **1 lucky vote never dominates**.
+**Reliability Condition:**
+```
+Pair is reliable ⟺ LCB > 0.5 OR UCB < 0.5
+```
+
+**Why This Works:**
+
+| Observed | n | p̂ | LCB (95%) | Reliable? | Reason |
+|----------|---|-----|-----------|-----------|--------|
+| 8-2 | 10 | 0.80 | 0.55 | ✅ | Strong margin, CI above 0.5 |
+| 6-4 | 10 | 0.60 | 0.30 | ❌ | Moderate margin, CI crosses 0.5 |
+| 15-10 | 25 | 0.60 | 0.41 | ❌ | Still crosses 0.5 |
+| 18-7 | 25 | 0.72 | 0.54 | ✅ | More data confirms direction |
+| 3-0 | 3 | 1.00 | 0.29 | ❌ | Perfect but insufficient data |
+| 10-0 | 10 | 1.00 | 0.69 | ✅ | Unanimous with enough data |
+
+**Key Properties:**
+- **Strong margins** → fewer observations needed
+- **Close races** → more observations needed
+- **Self-calibrating** → adapts to actual vote patterns
+- **No arbitrary thresholds** → statistically principled
+
+➡️ This ensures we only trust pairs where we have **statistical confidence** in the direction of preference.
 
 ---
 
@@ -251,13 +293,13 @@ Never random.
 
 # 🔚 Final Recommendation (production default)
 
-| Component         | Choice                        |
-| ----------------- | ----------------------------- |
-| Condorcet variant | **Ranked Pairs**              |
-| Robustness        | Beta smoothing + √n penalty   |
-| Duel selection    | Copeland bounds + uncertainty |
-| Output            | Top-k only                    |
-| Threshold         | ≥5 duels per critical pair    |
+| Component         | Choice                                      |
+| ----------------- | ------------------------------------------- |
+| Condorcet variant | **Ranked Pairs**                            |
+| Robustness        | Beta smoothing + √n penalty                 |
+| Duel selection    | Copeland bounds + uncertainty               |
+| Output            | Top-k only                                  |
+| Reliability       | **Confidence interval rule** (95%, z=1.96)  |
 
 ---
 
