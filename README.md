@@ -6,10 +6,10 @@ ScreenBuddies helps groups of friends decide what to watch or play together. Ins
 
 | Component | Technology |
 |-----------|------------|
-| Backend | Laravel 11 (PHP 8.3) |
+| Backend | Laravel 11 (PHP 8.3+) |
 | Frontend | Flutter 3.x (Dart) |
-| Database | MySQL |
-| Authentication | JWT with refresh tokens |
+| Database | PostgreSQL |
+| Authentication | Laravel Sanctum (JWT-style tokens) |
 | Platforms | iOS, Android, Web |
 | Languages | English, French (i18n ready) |
 
