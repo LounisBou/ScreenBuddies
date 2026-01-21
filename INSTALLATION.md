@@ -2,6 +2,8 @@
 
 This document tracks all installation and initialization commands for the ScreenBuddies project.
 
+**Laravel Version:** 12.x (latest stable)
+
 ## Prerequisites
 
 ### macOS (Homebrew)
@@ -12,10 +14,13 @@ This document tracks all installation and initialization commands for the Screen
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-#### 2. Install PHP 8.3+ (if not using phpenv)
+#### 2. Install PHP 8.3+
 
 ```bash
+# If not using phpenv
 brew install php@8.3
+
+# Homebrew's PHP includes most extensions (pgsql, mbstring, xml, curl, zip)
 ```
 
 #### 3. Install Composer
@@ -43,7 +48,8 @@ export PATH="$HOME/.local/bin:$PATH"
 # Via PECL
 pecl install redis
 
-# Then add to php.ini (find location with: php --ini)
+# The extension is usually auto-enabled. If not, add to php.ini:
+# Find php.ini location: php --ini
 # Add line: extension=redis
 ```
 
@@ -54,7 +60,11 @@ brew install postgresql@16
 brew services start postgresql@16
 
 # Add to PATH (add to ~/.zshrc or ~/.bashrc)
+# Apple Silicon Macs:
 export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+
+# Intel Macs:
+# export PATH="/usr/local/opt/postgresql@16/bin:$PATH"
 ```
 
 #### 6. Install Redis 7
@@ -62,6 +72,12 @@ export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
 ```bash
 brew install redis
 brew services start redis
+```
+
+#### 7. Install Node.js (required for Vite asset bundling)
+
+```bash
+brew install node
 ```
 
 ---
@@ -85,11 +101,23 @@ pg_isready
 
 # Redis status
 redis-cli ping
+
+# Node.js version
+node -v
 ```
 
 ---
 
 ## Database Setup
+
+### Create PostgreSQL User (if needed)
+
+If your macOS user doesn't exist in PostgreSQL:
+
+```bash
+# Create a superuser with your username
+createuser -s $(whoami)
+```
 
 ### Create PostgreSQL Database
 
@@ -110,13 +138,22 @@ psql -l | grep screenbuddies
 ### Create Laravel Project
 
 ```bash
-cd /Users/lounis/dev/ScreenBuddies
+# From the project root directory
 composer create-project laravel/laravel backend
 ```
 
 ### Configure Environment
 
-Edit `backend/.env`:
+```bash
+# Copy environment template
+cp backend/.env.example backend/.env
+
+# Generate application key
+cd backend
+php artisan key:generate
+```
+
+Edit `backend/.env` and update database credentials:
 
 ```env
 APP_NAME=ScreenBuddies
@@ -128,7 +165,7 @@ DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_DATABASE=screenbuddies
-DB_USERNAME=lounis
+DB_USERNAME=your_postgres_username
 DB_PASSWORD=
 
 REDIS_HOST=127.0.0.1
@@ -138,6 +175,8 @@ CACHE_STORE=redis
 QUEUE_CONNECTION=redis
 SESSION_DRIVER=redis
 ```
+
+> **Note:** Replace `your_postgres_username` with your PostgreSQL username (typically your macOS username).
 
 ### Run Migrations
 
@@ -164,7 +203,7 @@ If using phpenv, composer may not be in the shims. Install globally:
 
 ```bash
 brew install composer
-# Or add to path: export PATH="$HOME/.composer/vendor/bin:$PATH"
+# Or add to path: export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ### PHP Redis extension not loading
@@ -173,7 +212,7 @@ Check php.ini location and ensure `extension=redis` is added:
 
 ```bash
 php --ini
-# Edit the loaded php.ini file
+# Edit the loaded php.ini file and add: extension=redis
 ```
 
 ### PostgreSQL connection refused
@@ -184,10 +223,26 @@ Ensure PostgreSQL is running:
 brew services start postgresql@16
 ```
 
+### PostgreSQL "role does not exist" error
+
+Create your user in PostgreSQL:
+
+```bash
+createuser -s $(whoami)
+```
+
 ### Redis connection refused
 
 Ensure Redis is running:
 
 ```bash
 brew services start redis
+```
+
+### PHP library not loaded error after brew upgrade
+
+Reinstall PHP to relink libraries:
+
+```bash
+brew reinstall php
 ```
