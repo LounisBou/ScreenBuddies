@@ -80,6 +80,21 @@ brew services start redis
 brew install node
 ```
 
+#### 8. Install PCOV (for code coverage)
+
+```bash
+# Install pcre2 dependency first
+brew install pcre2
+
+# Install PCOV via PECL
+pecl install pcov
+
+# Verify installation
+php -m | grep pcov
+```
+
+> **Note:** PCOV is faster than Xdebug for code coverage. If PECL install fails, you may need to install pcre2 headers or use Xdebug as an alternative.
+
 ---
 
 ## Verify Prerequisites
@@ -90,8 +105,8 @@ Run these commands to verify all prerequisites are installed:
 # PHP version (should be 8.3+)
 php -v
 
-# PHP extensions (should include: pgsql, redis, mbstring, xml, curl, zip)
-php -m | grep -E 'pgsql|redis|mbstring|xml|curl|zip'
+# PHP extensions (should include: pgsql, redis, mbstring, xml, curl, zip, pcov)
+php -m | grep -E 'pgsql|redis|mbstring|xml|curl|zip|pcov'
 
 # Composer version (should be 2.x)
 composer --version
