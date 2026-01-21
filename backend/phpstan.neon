@@ -1,0 +1,15 @@
+# PHPStan configuration for ScreenBuddies
+#
+# Level 5: Checks return types and parameter types without requiring
+# complete type coverage. Suitable for Laravel projects where Larastan
+# provides model/facade type inference.
+#
+# Paths: Analyzes app/ only. Config/database/routes are scaffolding.
+
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+    level: 5
