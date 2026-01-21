@@ -85,7 +85,9 @@ This document tracks potential features, improvements, and ideas for future vers
 
 ### Shorter Refresh Token Lifetime
 
-**Status:** Currently 7 days with Sanctum
+**Status:** Deferred (R11 - 2026-01-21)
+
+> Keeping 7-day refresh token for now. Can be shortened in the future if needed.
 
 **Concept:**
 - Reduce to 24-48 hours with sliding window
@@ -100,7 +102,7 @@ This document tracks potential features, improvements, and ideas for future vers
 - Users inactive for 48h need to re-login
 
 **References:**
-- See R11 in `recommendations.md`
+- Deferred from R11 (2026-01-21)
 
 ---
 

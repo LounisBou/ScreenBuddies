@@ -577,10 +577,13 @@ Reduce refresh token lifetime to **24-48 hours** with **sliding window**:
 - Affects: Phase 2 (auth config)
 - Effort: Low
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [ ] Accept  [ ] Reject  [x] Defer
 
 **Notes:**
-_To be filled during review_
+- Deferred on 2026-01-21
+- Keep 7-day refresh token for now
+- Can be shortened to 24-48h sliding window in the future if needed
+- Added to `docs/future-ideas.md` for future consideration
 
 ---
 
@@ -657,7 +660,7 @@ _To be filled during review_
 | R8 | Remove BGG and Theater | Medium | Low | Deferred |
 | R9 | Add Sentry error monitoring | Medium | Low | Implemented (R5) |
 | R10 | Add offline support | Low | Med-High | Accepted |
-| R11 | Shorten refresh token | Low | Low | Pending |
+| R11 | Shorten refresh token | Low | Low | Deferred |
 | R12 | Add JSON schema validation | Low | Low | Pending |
 
 ---
@@ -676,4 +679,5 @@ _To be filled during review_
 | 2026-01-21 | R8: BGG and Theater | **Deferred** | Keep as placeholders, added to future-ideas.md |
 | 2026-01-21 | R9: Sentry Monitoring | **Implemented (R5)** | Already covered by Phase 0 Infrastructure |
 | 2026-01-21 | R10: Offline Support | **Accepted** | Read-only offline mode with Hive caching |
+| 2026-01-21 | R11: Refresh Token | **Deferred** | Keep 7-day token for now, shorten later if needed |
 
