@@ -49,13 +49,17 @@ Removed `laravel/pint` since we use custom `.php-cs-fixer.php` configuration.
 
 ---
 
-## Suggestions (3)
+## Suggestions (6) - ALL EVALUATED
 
-1. **Document risky mode in .php-cs-fixer.php** - `setRiskyAllowed(true)` is enabled without documentation explaining why.
+### Applied:
+1. **Document risky mode in .php-cs-fixer.php** - ✅ APPLIED: Added comment explaining risky rules
+2. **Add PHPStan level comment** - ✅ APPLIED: Added header comments to phpstan.neon
+3. **Add config header comments to phpstan.neon** - ✅ APPLIED: Added comprehensive header
+4. **Expand PCOV troubleshooting** - ✅ APPLIED: Added detailed troubleshooting steps
 
-2. **Consider PHPStan baseline file** - For larger projects, a baseline helps distinguish pre-existing errors from new ones.
-
-3. **Add PHPStan level comment** - Explain why level 5 was chosen.
+### Not Applied (with reasons):
+5. **Consider PHPStan baseline file** - ❌ NOT APPLIED: Project is new with zero existing errors. Baseline not needed until legacy code exists.
+6. **Note PHPUnit 12 is very new** - ❌ NOT APPLIED: PHPUnit 12 is required by Pest 4.x which is required for Laravel 12. No alternative exists. Awareness noted.
 
 ---
 
