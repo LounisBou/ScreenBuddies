@@ -533,10 +533,16 @@ Add **read-only offline support** for:
 - Affects: Phase 5, Phase 6 (Flutter data layer)
 - Effort: Medium-High
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Defer
+**Decision:** [x] Accept  [ ] Reject  [ ] Defer
 
 **Notes:**
-_To be filled during review_
+- Accepted on 2026-01-21
+- **Read-only offline mode:** View cached data, no modifications
+- **Storage:** Hive (pure Dart, no native dependencies)
+- **Cached data:** Elections list, election details, candidates, results, user's votes
+- **Disabled offline:** Voting, election creation, media search
+- **UI:** "Offline" indicator when disconnected, "Last updated" timestamps
+- Affects Phase 5 (data layer) and Phase 6 (UI states)
 
 ---
 
@@ -650,7 +656,7 @@ _To be filled during review_
 | R7 | Confidence interval reliability rule | Medium | Low-Med | Accepted |
 | R8 | Remove BGG and Theater | Medium | Low | Deferred |
 | R9 | Add Sentry error monitoring | Medium | Low | Implemented (R5) |
-| R10 | Add offline support | Low | Med-High | Pending |
+| R10 | Add offline support | Low | Med-High | Accepted |
 | R11 | Shorten refresh token | Low | Low | Pending |
 | R12 | Add JSON schema validation | Low | Low | Pending |
 
@@ -669,4 +675,5 @@ _To be filled during review_
 | 2026-01-21 | R7: Confidence Interval Rule | **Accepted** | Replace fixed MIN_PAIR_DUELS with statistical reliability |
 | 2026-01-21 | R8: BGG and Theater | **Deferred** | Keep as placeholders, added to future-ideas.md |
 | 2026-01-21 | R9: Sentry Monitoring | **Implemented (R5)** | Already covered by Phase 0 Infrastructure |
+| 2026-01-21 | R10: Offline Support | **Accepted** | Read-only offline mode with Hive caching |
 

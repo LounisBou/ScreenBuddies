@@ -18,8 +18,10 @@ Cross-platform mobile and web application built with Flutter, using modern state
 | Navigation | GoRouter | Latest |
 | HTTP Client | Dio | Latest |
 | Local Storage | SharedPreferences | Latest |
+| Offline Cache | Hive | Latest |
 | Push Notifications | Firebase Cloud Messaging | Latest |
 | Internationalization | flutter_localizations + intl | Built-in |
+| Connectivity | connectivity_plus | Latest |
 
 ---
 
@@ -378,6 +380,102 @@ class ApiClient {
   }
 }
 ```
+
+---
+
+## Offline Support
+
+The app provides **read-only offline mode** using Hive for local caching.
+
+### Offline Capabilities
+
+| Feature | Online | Offline |
+|---------|--------|---------|
+| View elections list | ✅ Fresh data | ✅ Cached data |
+| View election details | ✅ Fresh data | ✅ Cached data |
+| View candidates & results | ✅ Fresh data | ✅ Cached data |
+| View own vote history | ✅ Fresh data | ✅ Cached data |
+| Vote in duels | ✅ | ❌ Disabled |
+| Create election | ✅ | ❌ Disabled |
+| Search media (TMDB/RAWG) | ✅ | ❌ Disabled |
+
+### Cache Strategy
+
+```dart
+// Repository pattern with offline-first approach
+class ElectionRepository {
+  final ApiClient _api;
+  final ElectionCache _cache;
+  final ConnectivityService _connectivity;
+
+  Future<List<Election>> getMyElections() async {
+    // Always return cached data first (instant UI)
+    final cached = await _cache.getElections();
+
+    if (await _connectivity.isOnline) {
+      try {
+        // Fetch fresh data in background
+        final fresh = await _api.getMyElections();
+        await _cache.saveElections(fresh);
+        return fresh;
+      } catch (e) {
+        // API failed, return cached
+        return cached;
+      }
+    }
+
+    return cached;
+  }
+}
+```
+
+### Hive Cache Structure
+
+```dart
+@HiveType(typeId: 0)
+class CachedElection extends HiveObject {
+  @HiveField(0)
+  final String id;
+
+  @HiveField(1)
+  final String title;
+
+  @HiveField(2)
+  final DateTime cachedAt;
+
+  // ... other fields
+}
+
+// Cache boxes
+// - electionsBox: user's elections
+// - electionDetailsBox: individual election details
+// - candidatesBox: candidates per election
+// - resultsBox: cached results
+```
+
+### Connectivity Monitoring
+
+```dart
+class ConnectivityService {
+  final _connectivity = Connectivity();
+
+  Stream<bool> get onConnectivityChanged =>
+    _connectivity.onConnectivityChanged.map(
+      (result) => result != ConnectivityResult.none
+    );
+
+  Future<bool> get isOnline async {
+    final result = await _connectivity.checkConnectivity();
+    return result != ConnectivityResult.none;
+  }
+}
+```
+
+### UI Indicators
+
+- **Offline banner:** Shown at top when disconnected
+- **Last updated:** "Updated 5 min ago" on cached screens
+- **Disabled actions:** Greyed out vote/create buttons with tooltip
 
 ---
 

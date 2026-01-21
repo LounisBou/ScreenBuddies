@@ -136,5 +136,8 @@ Uses **Condorcet method with incomplete duels**:
 | Frontend | Flutter (Dart) |
 | Authentication | Laravel Sanctum (API tokens) |
 | Circuit Breaker | ackintosh/ganesha (for external APIs) |
+| Local Storage | Hive (offline cache) |
 | Languages | English, French (i18n ready) |
-| Connectivity | Online only |
+| Connectivity | Online required for actions, read-only offline mode |
+
+> **Offline Support:** Users can view cached elections, details, and results when offline. Voting and creation require online connectivity.

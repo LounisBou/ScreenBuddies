@@ -6,7 +6,9 @@
 
 **Architecture:** Feature-based organization with providers per feature. Reusable widgets for elections and candidates. Multi-step creation flow with stepper.
 
-**Tech Stack:** Flutter 3.x, Riverpod 2.x, GoRouter, Dio
+**Tech Stack:** Flutter 3.x, Riverpod 2.x, GoRouter, Dio, Hive (offline cache), connectivity_plus
+
+**Offline Support:** Election list, details, and results support read-only offline mode. Voting requires online connectivity.
 
 **Platform Strategy:** Mobile first (iOS/Android primary), Web as fallback for desktop users.
 
@@ -1068,10 +1070,113 @@ git commit -m "feat: add election card widget"
 
 ---
 
+## Task 5.5: Create Offline UI Components
+
+**Files:**
+- Create: `frontend/lib/presentation/widgets/common/offline_banner.dart`
+- Create: `frontend/lib/presentation/widgets/common/last_updated_text.dart`
+
+**Step 1: Create Offline Banner Widget**
+
+Create `frontend/lib/presentation/widgets/common/offline_banner.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/connectivity_service.dart';
+
+class OfflineBanner extends ConsumerWidget {
+  const OfflineBanner({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOnline = ref.watch(isOnlineProvider);
+
+    return isOnline.when(
+      data: (online) => online
+          ? const SizedBox.shrink()
+          : Container(
+              width: double.infinity,
+              color: Colors.orange.shade700,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.cloud_off, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'You are offline - showing cached data',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+```
+
+**Step 2: Create Last Updated Text Widget**
+
+Create `frontend/lib/presentation/widgets/common/last_updated_text.dart`:
+```dart
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+class LastUpdatedText extends StatelessWidget {
+  final DateTime? cachedAt;
+
+  const LastUpdatedText({super.key, this.cachedAt});
+
+  @override
+  Widget build(BuildContext context) {
+    if (cachedAt == null) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final difference = now.difference(cachedAt!);
+
+    String text;
+    if (difference.inMinutes < 1) {
+      text = 'Updated just now';
+    } else if (difference.inMinutes < 60) {
+      text = 'Updated ${difference.inMinutes} min ago';
+    } else if (difference.inHours < 24) {
+      text = 'Updated ${difference.inHours} hours ago';
+    } else {
+      text = 'Updated ${DateFormat.yMd().format(cachedAt!)}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.grey,
+            ),
+      ),
+    );
+  }
+}
+```
+
+**Step 3: Commit**
+
+```bash
+git add .
+git commit -m "feat: add offline UI components (banner + last updated)"
+```
+
+---
+
 ## Task 6: Update Home Screen with Elections List
 
 **Files:**
 - Modify: `frontend/lib/presentation/screens/home/home_screen.dart`
+
+> **Note:** The home screen should include the `OfflineBanner` widget at the top of the body to show offline status.
 
 **Step 1: Update home screen**
 

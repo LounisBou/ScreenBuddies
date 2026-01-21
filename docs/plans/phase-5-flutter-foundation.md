@@ -6,7 +6,7 @@
 
 **Architecture:** Clean architecture with data/domain/presentation layers. Riverpod for state management. GoRouter for declarative routing. Dio with interceptors for API calls.
 
-**Tech Stack:** Flutter 3.x, Riverpod 2.x, GoRouter, Dio, flutter_secure_storage
+**Tech Stack:** Flutter 3.x, Riverpod 2.x, GoRouter, Dio, flutter_secure_storage, Hive (offline cache), connectivity_plus
 
 **Platform Strategy:** Mobile first (iOS/Android primary), Web as fallback for desktop users. Single codebase.
 
@@ -91,6 +91,13 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   shared_preferences: ^2.2.2
 
+  # Offline Cache
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Connectivity
+  connectivity_plus: ^5.0.2
+
   # UI
   google_fonts: ^6.1.0
   cached_network_image: ^3.3.1
@@ -108,6 +115,7 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
   retrofit_generator: ^8.0.6
   json_serializable: ^6.7.1
+  hive_generator: ^2.0.1
 
 flutter:
   uses-material-design: true
@@ -666,6 +674,137 @@ class ApiClient {
 ```bash
 git add .
 git commit -m "feat: add API client with Dio"
+```
+
+---
+
+## Task 5.5: Setup Offline Support Infrastructure
+
+**Files:**
+- Create: `frontend/lib/core/services/connectivity_service.dart`
+- Create: `frontend/lib/data/cache/hive_cache.dart`
+- Modify: `frontend/lib/main.dart` (Hive initialization)
+
+**Step 1: Create Connectivity Service**
+
+Create `frontend/lib/core/services/connectivity_service.dart`:
+```dart
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
+  return ConnectivityService();
+});
+
+final isOnlineProvider = StreamProvider<bool>((ref) {
+  return ref.read(connectivityServiceProvider).onConnectivityChanged;
+});
+
+class ConnectivityService {
+  final _connectivity = Connectivity();
+
+  Stream<bool> get onConnectivityChanged =>
+      _connectivity.onConnectivityChanged.map(
+        (result) => result != ConnectivityResult.none,
+      );
+
+  Future<bool> get isOnline async {
+    final result = await _connectivity.checkConnectivity();
+    return result != ConnectivityResult.none;
+  }
+}
+```
+
+**Step 2: Create Hive Cache Service**
+
+Create `frontend/lib/data/cache/hive_cache.dart`:
+```dart
+import 'package:hive_flutter/hive_flutter.dart';
+
+class HiveCache {
+  static const String electionsBox = 'elections';
+  static const String electionDetailsBox = 'election_details';
+  static const String candidatesBox = 'candidates';
+  static const String resultsBox = 'results';
+  static const String userVotesBox = 'user_votes';
+
+  static Future<void> init() async {
+    await Hive.initFlutter();
+
+    // Open boxes
+    await Hive.openBox(electionsBox);
+    await Hive.openBox(electionDetailsBox);
+    await Hive.openBox(candidatesBox);
+    await Hive.openBox(resultsBox);
+    await Hive.openBox(userVotesBox);
+  }
+
+  // Elections list cache
+  static Future<void> cacheElections(List<Map<String, dynamic>> elections) async {
+    final box = Hive.box(electionsBox);
+    await box.put('data', elections);
+    await box.put('cached_at', DateTime.now().toIso8601String());
+  }
+
+  static List<Map<String, dynamic>>? getCachedElections() {
+    final box = Hive.box(electionsBox);
+    final data = box.get('data');
+    return data != null ? List<Map<String, dynamic>>.from(data) : null;
+  }
+
+  static DateTime? getElectionsCachedAt() {
+    final box = Hive.box(electionsBox);
+    final cachedAt = box.get('cached_at');
+    return cachedAt != null ? DateTime.parse(cachedAt) : null;
+  }
+
+  // Election details cache
+  static Future<void> cacheElectionDetails(String id, Map<String, dynamic> details) async {
+    final box = Hive.box(electionDetailsBox);
+    await box.put(id, {
+      'data': details,
+      'cached_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Map<String, dynamic>? getCachedElectionDetails(String id) {
+    final box = Hive.box(electionDetailsBox);
+    final cached = box.get(id);
+    return cached != null ? Map<String, dynamic>.from(cached['data']) : null;
+  }
+
+  // Clear all cache
+  static Future<void> clearAll() async {
+    await Hive.box(electionsBox).clear();
+    await Hive.box(electionDetailsBox).clear();
+    await Hive.box(candidatesBox).clear();
+    await Hive.box(resultsBox).clear();
+    await Hive.box(userVotesBox).clear();
+  }
+}
+```
+
+**Step 3: Update main.dart for Hive initialization**
+
+Add Hive initialization in `main()` before `runApp()`:
+```dart
+import 'package:screenbuddies/data/cache/hive_cache.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive for offline cache
+  await HiveCache.init();
+
+  runApp(const ProviderScope(child: ScreenBuddiesApp()));
+}
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "feat: add offline support infrastructure (Hive + connectivity)"
 ```
 
 ---

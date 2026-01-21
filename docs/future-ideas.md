@@ -68,27 +68,16 @@ This document tracks potential features, improvements, and ideas for future vers
 
 ### Read-Only Offline Mode
 
-**Status:** Not planned for MVP (explicitly "online only")
+**Status:** ✅ **ACCEPTED** (R10 - implemented in Phase 5/6)
 
-**Concept:**
-- Cache user's elections list locally
-- Show cached election details when offline
-- Display "Offline" indicator
-- Disable voting/creation when offline
-- Sync when connection returns
+> This feature has been moved from future ideas to the implementation plan.
+> See `docs/specifications/04-frontend-architecture.md` for full details.
 
-**Implementation:**
-- Use Hive or SQLite for local storage
-- Cache API responses with TTL
-- Conflict resolution for stale data
-
-**Trade-offs:**
-- Adds complexity to data layer
-- Cache invalidation challenges
-- Storage usage on device
-
-**References:**
-- See R10 in `recommendations.md`
+**Summary:**
+- Hive for local caching
+- Cache elections list, details, candidates, results
+- Offline banner UI when disconnected
+- Voting/creation disabled offline
 
 ---
 
