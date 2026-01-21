@@ -19,6 +19,8 @@ $finder = Finder::create()
     ->ignoreVCS(true);
 
 return (new Config())
+    // Risky rules enabled for: no_alias_functions, psr_autoloading, self_accessor,
+    // no_unreachable_default_argument_value. Safe when tests pass after formatting.
     ->setRiskyAllowed(true)
     ->setRules([
         '@PSR12' => true,
@@ -32,10 +34,6 @@ return (new Config())
         'blank_line_after_opening_tag' => true,
         'blank_line_before_statement' => [
             'statements' => ['return'],
-        ],
-        'braces_position' => [
-            'classes_opening_brace' => 'same_line',
-            'functions_opening_brace' => 'same_line',
         ],
         'cast_spaces' => true,
         'class_attributes_separation' => [

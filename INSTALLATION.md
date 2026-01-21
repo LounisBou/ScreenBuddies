@@ -93,7 +93,14 @@ pecl install pcov
 php -m | grep pcov
 ```
 
-> **Note:** PCOV is faster than Xdebug for code coverage. If PECL install fails, you may need to install pcre2 headers or use Xdebug as an alternative.
+> **Note:** PCOV is faster than Xdebug for code coverage.
+>
+> **Troubleshooting PCOV installation:**
+> - If `pecl install pcov` fails with `pcre2.h: No such file or directory`:
+>   - Verify pcre2 is installed: `brew list pcre2`
+>   - Check headers exist: `ls /opt/homebrew/opt/pcre2/include/` (Apple Silicon) or `/usr/local/opt/pcre2/include/` (Intel)
+>   - Try reinstalling: `brew reinstall pcre2`
+> - **Alternative:** Use Xdebug instead: `pecl install xdebug`
 
 ---
 
