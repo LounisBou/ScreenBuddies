@@ -8,6 +8,8 @@
 
 **Tech Stack:** Flutter 3.x, Riverpod 2.x, GoRouter, Dio
 
+**Platform Strategy:** Mobile first (iOS/Android primary), Web as fallback for desktop users.
+
 **Prerequisites:** Phase 5 complete (Flutter foundation with auth)
 
 ---

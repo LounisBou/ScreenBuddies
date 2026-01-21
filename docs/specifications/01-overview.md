@@ -115,12 +115,14 @@ Uses **Condorcet method with incomplete duels**:
 
 ## Platform Targets
 
-| Platform | Supported |
-|----------|-----------|
-| iOS | Yes |
-| Android | Yes |
-| Web | Yes |
-| Desktop | No (future) |
+| Platform | Priority | Notes |
+|----------|----------|-------|
+| iOS | Primary | Mobile first |
+| Android | Primary | Mobile first |
+| Web | Fallback | Desktop users via Flutter Web |
+| Desktop | No | Not planned |
+
+> **Strategy:** Mobile first (iOS/Android), Web as fallback for desktop users. Single Flutter codebase for all platforms. No SEO requirements.
 
 ---
 

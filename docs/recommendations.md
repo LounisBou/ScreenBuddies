@@ -251,10 +251,15 @@ Add **Phase 0: Infrastructure Setup** before Phase 1, covering:
 - New Phase 0 before all other phases
 - Effort: Medium-High initially, but saves time long-term
 
-**Decision:** [ ] Accept  [ ] Reject  [ ] Modify
+**Decision:** [ ] Accept  [ ] Reject  [x] Modify
 
 **Notes:**
-_To be filled during review_
+- Accepted (modified) on 2026-01-20
+- **Local Development:** Native PHP/PostgreSQL/Redis (NO Docker)
+- **Hosting:** TBD (keep flexible for now)
+- **Sentry:** Free tier to start (5K errors/month)
+- **Phase 0** created as separate phase before Phase 1
+- Full documentation: `docs/infrastructure.md`
 
 ---
 
@@ -300,10 +305,15 @@ Choose one of these strategies:
 - Affects: Phase 5, Phase 6, all Flutter phases
 - Effort: Low (Option A) or High (Option B)
 
-**Decision:** [ ] Accept Option A  [ ] Accept Option B  [ ] Keep Flutter Web  [ ] Modify
+**Decision:** [ ] Accept Option A  [ ] Accept Option B  [x] Keep Flutter Web  [ ] Modify
 
 **Notes:**
-_To be filled during review_
+- Accepted (Keep Flutter Web) on 2026-01-21
+- **Mobile first:** iOS and Android are primary platforms
+- **Web as fallback:** Flutter Web for desktop users
+- **No SEO requirements:** Canvas rendering is acceptable
+- **Single codebase:** Flutter handles all 3 platforms
+- Bundle size (2-4MB) acceptable for desktop fallback use case
 
 ---
 
@@ -594,12 +604,12 @@ _To be filled during review_
 
 | ID | Recommendation | Priority | Effort | Status |
 |----|----------------|----------|--------|--------|
-| R1 | Switch to Laravel Sanctum | High | Medium | Pending |
-| R2 | Commit to PostgreSQL | High | Low | Pending |
-| R3 | Add Skip option to duels | High | Low-Med | Pending |
+| R1 | Switch to Laravel Sanctum | High | Medium | Accepted |
+| R2 | Commit to PostgreSQL | High | Low | Accepted |
+| R3 | Add Skip option to duels | High | Low-Med | Accepted |
 | R4 | Add circuit breaker for APIs | High | Medium | Accepted |
-| R5 | Define infrastructure plan | High | Med-High | Pending |
-| R6 | Reconsider Flutter Web | Medium | Varies | Pending |
+| R5 | Define infrastructure plan | High | Med-High | Modified |
+| R6 | Reconsider Flutter Web | Medium | Varies | Keep Flutter Web |
 | R7 | Make MIN_PAIR_DUELS dynamic | Medium | Low | Pending |
 | R8 | Remove BGG and Theater | Medium | Low | Pending |
 | R9 | Add Sentry error monitoring | Medium | Low | Pending |
@@ -617,4 +627,6 @@ _To be filled during review_
 | 2026-01-20 | R2: Commit to PostgreSQL | **Accepted** | Better JSON/jsonb support, GIN indexes |
 | 2026-01-20 | R3: Add Skip to Duels | **Accepted** | No skip limit, store as null in JSON |
 | 2026-01-20 | R4: Circuit Breaker | **Accepted** | Using ackintosh/ganesha with Guzzle Middleware |
+| 2026-01-20 | R5: Infrastructure | **Modified** | No Docker, Sentry free tier, Phase 0 created |
+| 2026-01-21 | R6: Flutter Web | **Keep Flutter Web** | Mobile first, web fallback, no SEO, single codebase |
 

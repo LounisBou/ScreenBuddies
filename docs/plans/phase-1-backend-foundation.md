@@ -2,68 +2,22 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Set up Laravel 11 project with database schema, models, and Sanctum authentication.
+**Goal:** Create database schema, models, and Sanctum authentication infrastructure.
 
-**Architecture:** Fresh Laravel 11 API-only project with Laravel Sanctum for API token authentication. All database tables with migrations, models, and relationships. Pest for testing.
+**Architecture:** Laravel 11 API-only project with Laravel Sanctum for API token authentication. All database tables with migrations, models, and relationships. Pest for testing.
 
 **Tech Stack:** Laravel 11, PHP 8.3+, PostgreSQL, Laravel Sanctum, Pest
 
-**Prerequisites:** PHP 8.3+, Composer, PostgreSQL running locally
+**Prerequisites:** Phase 0 complete (Laravel project initialized, dev tools installed, CI/CD setup)
 
 ---
 
-## Task 1: Create Laravel Project
-
-**Files:**
-- Create: `backend/` (new Laravel project)
-
-**Step 1: Create new Laravel project**
-
-```bash
-cd /Users/lounis/dev/ScreenBuddies
-composer create-project laravel/laravel backend
-```
-
-**Step 2: Verify installation**
-
-```bash
-cd backend && php artisan --version
-```
-Expected: `Laravel Framework 11.x.x`
-
-**Step 3: Configure environment**
-
-Edit `backend/.env`:
-```env
-APP_NAME=ScreenBuddies
-APP_URL=http://localhost:8000
-
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=screenbuddies
-DB_USERNAME=postgres
-DB_PASSWORD=
-```
-
-**Step 4: Create database**
-
-```bash
-psql -U postgres -c "CREATE DATABASE screenbuddies;"
-```
-
-**Step 5: Commit**
-
-```bash
-cd /Users/lounis/dev/ScreenBuddies/backend
-git init
-git add .
-git commit -m "chore: initialize Laravel 11 project"
-```
+> **Note:** Project initialization, dev tools, CI/CD, and Sentry are set up in **Phase 0**.
+> This phase assumes you have a working Laravel project with PostgreSQL and Redis configured.
 
 ---
 
-## Task 2: Install and Configure Laravel Sanctum
+## Task 1: Install and Configure Laravel Sanctum
 
 **Files:**
 - Modify: `backend/composer.json`
@@ -108,7 +62,7 @@ git commit -m "chore: install and configure Laravel Sanctum"
 
 ---
 
-## Task 3: Install Pest Testing Framework
+## Task 2: Install Pest Testing Framework
 
 **Files:**
 - Modify: `backend/composer.json`
@@ -144,7 +98,7 @@ git commit -m "chore: install Pest testing framework"
 
 ---
 
-## Task 4: Create User Migration and Model
+## Task 3: Create User Migration and Model
 
 **Files:**
 - Modify: `backend/database/migrations/0001_01_01_000000_create_users_table.php`
@@ -309,7 +263,7 @@ git commit -m "feat: add User model with Sanctum support"
 
 ---
 
-## Task 5: Create UserPreference Migration and Model
+## Task 4: Create UserPreference Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000001_create_user_preferences_table.php`
@@ -436,7 +390,7 @@ git commit -m "feat: add UserPreference model"
 
 ---
 
-## Task 6: Create MediaType Migration and Model
+## Task 5: Create MediaType Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000001_create_media_types_table.php`
@@ -567,7 +521,7 @@ git commit -m "feat: add MediaType model"
 
 ---
 
-## Task 7: Create Friendship Migration and Model
+## Task 6: Create Friendship Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000002_create_friendships_table.php`
@@ -718,7 +672,7 @@ git commit -m "feat: add Friendship model with status enum"
 
 ---
 
-## Task 8: Create Election Migration and Model
+## Task 7: Create Election Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000003_create_elections_table.php`
@@ -932,7 +886,7 @@ git commit -m "feat: add Election model with status enum"
 
 ---
 
-## Task 9: Create Candidate Migration and Model
+## Task 8: Create Candidate Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000004_create_candidates_table.php`
@@ -1081,7 +1035,7 @@ git commit -m "feat: add Candidate model"
 
 ---
 
-## Task 10: Create Voter Migration and Model
+## Task 9: Create Voter Migration and Model
 
 **Files:**
 - Create: `backend/database/migrations/2024_01_01_000005_create_voters_table.php`
@@ -1224,7 +1178,7 @@ git commit -m "feat: add Voter model"
 
 ---
 
-## Task 11: Add User Relationships (formerly Task 12)
+## Task 10: Add User Relationships
 
 **Files:**
 - Modify: `backend/app/Models/User.php`
@@ -1317,7 +1271,7 @@ git commit -m "feat: add User relationships"
 
 ---
 
-## Task 13: Create MediaType Seeder
+## Task 11: Create MediaType Seeder
 
 **Files:**
 - Create: `backend/database/seeders/MediaTypeSeeder.php`
@@ -1423,7 +1377,7 @@ git commit -m "feat: add MediaType seeder with 5 types"
 
 ---
 
-## Task 14: Run Full Test Suite and Final Commit
+## Task 12: Run Full Test Suite and Final Commit
 
 **Step 1: Run all tests**
 
@@ -1456,7 +1410,8 @@ git commit -m "chore: phase 1 complete - backend foundation"
 
 ## Phase 1 Completion Checklist
 
-- [ ] Laravel 11 project created
+> **Prerequisite:** Phase 0 complete (Laravel project, dev tools, CI/CD, Sentry)
+
 - [ ] Laravel Sanctum configured
 - [ ] Pest testing framework installed
 - [ ] All 7 migrations created and run (User, UserPreference, MediaType, Friendship, Election, Candidate, Voter)

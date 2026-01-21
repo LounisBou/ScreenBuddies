@@ -4,6 +4,8 @@
 
 Cross-platform mobile and web application built with Flutter, using modern state management and clean architecture principles.
 
+**Platform Strategy:** Mobile first (iOS/Android), Web as fallback for desktop users. Single codebase.
+
 ---
 
 ## Technology Stack
@@ -23,11 +25,13 @@ Cross-platform mobile and web application built with Flutter, using modern state
 
 ## Target Platforms
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| Android | Supported | Min SDK 21 (Android 5.0) |
-| iOS | Supported | Min iOS 12 |
-| Web | Supported | Modern browsers |
+| Platform | Priority | Notes |
+|----------|----------|-------|
+| Android | Primary | Min SDK 21 (Android 5.0) |
+| iOS | Primary | Min iOS 12 |
+| Web | Fallback | Modern browsers, desktop users only |
+
+> **Note:** Web is a fallback for desktop users who receive invite links. Mobile apps are the primary experience. No SEO requirements.
 
 ---
 
