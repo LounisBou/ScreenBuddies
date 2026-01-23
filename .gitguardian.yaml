@@ -1,0 +1,9 @@
+# GitGuardian configuration
+# https://docs.gitguardian.com/ggshield-docs/reference/gitguardian-yaml
+
+# Paths to ignore for secret detection
+paths-ignore:
+  - .github/workflows/ci.yml  # CI workflow uses test-only credentials for ephemeral containers
+
+# Note: The postgres/postgres credentials in ci.yml are intentional test credentials
+# for ephemeral CI containers. They are not production secrets.
