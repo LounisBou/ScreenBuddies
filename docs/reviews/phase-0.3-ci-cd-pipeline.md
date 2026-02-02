@@ -29,7 +29,7 @@
 
 ### 2. Default Credentials in .env.example
 **Status:** FIXED
-**Action:** Changed `DB_USERNAME=app` and `DB_PASSWORD=secret` to `your_username` and `your_password` to make them obviously placeholders.
+**Action:** Set `DB_USERNAME` and `DB_PASSWORD` from blank values to explicit placeholders (`your_username`, `your_password`) to make their purpose clear.
 
 ## Suggestions (3 found - 2 APPLIED, 1 NOT APPLIED)
 
