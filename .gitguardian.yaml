@@ -3,7 +3,7 @@
 
 # Paths to ignore for secret detection
 paths-ignore:
-  - .github/workflows/ci.yml  # CI workflow uses test-only credentials for ephemeral containers
+  - .github/workflows/ci.yml  # CI workflow uses test-only DB credentials (CI_TEST_DB_PASSWORD or 'testing') for ephemeral containers
 
-# Note: The postgres/postgres credentials in ci.yml are intentional test credentials
-# for ephemeral CI containers. They are not production secrets.
+# Note: The test database credentials in ci.yml are intentional test-only credentials
+# for ephemeral CI containers, using vars.CI_TEST_DB_PASSWORD or defaulting to 'testing'. They are not production secrets.
