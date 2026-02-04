@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
+use Sentry\State\HubInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
 
@@ -56,47 +59,90 @@ class SentryIntegrationTest extends TestCase
     }
 
     /**
-     * Test that ValidationException is in the dontReport list.
+     * Test that environment config defaults to app.env.
      */
-    public function test_validation_exceptions_are_not_reported(): void
+    public function test_environment_defaults_to_app_env(): void
     {
-        $handler = $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class);
-
-        // Check that ValidationException should not be reported
-        $reflection = new \ReflectionClass($handler);
-
-        // Get the internal dontReport property
-        if ($reflection->hasProperty('internalDontReport')) {
-            $property = $reflection->getProperty('internalDontReport');
-            $property->setAccessible(true);
-            $dontReport = $property->getValue($handler);
-
-            $this->assertContains(ValidationException::class, $dontReport);
-        } else {
-            // For newer Laravel versions, check via shouldReport method
-            $exception = ValidationException::withMessages(['test' => 'error']);
-            $this->assertFalse($handler->shouldReport($exception));
-        }
+        $this->assertEquals(
+            config('app.env'),
+            config('sentry.environment')
+        );
     }
 
     /**
-     * Test that NotFoundHttpException is in the dontReport list.
+     * Test that ValidationException should not be reported to Sentry.
+     */
+    public function test_validation_exceptions_are_not_reported(): void
+    {
+        $handler = $this->app->make(ExceptionHandler::class);
+
+        $exception = ValidationException::withMessages(['test' => 'error']);
+        $this->assertFalse($handler->shouldReport($exception));
+    }
+
+    /**
+     * Test that NotFoundHttpException should not be reported to Sentry.
      */
     public function test_not_found_exceptions_are_not_reported(): void
     {
-        $handler = $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class);
+        $handler = $this->app->make(ExceptionHandler::class);
 
         $exception = new NotFoundHttpException('Not found');
         $this->assertFalse($handler->shouldReport($exception));
     }
 
     /**
-     * Test that the health check endpoint still works.
+     * Test that regular exceptions should be reported to Sentry.
+     */
+    public function test_regular_exceptions_are_reported(): void
+    {
+        $handler = $this->app->make(ExceptionHandler::class);
+
+        $exception = new RuntimeException('Test error');
+        $this->assertTrue($handler->shouldReport($exception));
+    }
+
+    /**
+     * Test that the health check endpoint still works with Sentry integration.
      */
     public function test_health_check_endpoint_works(): void
     {
         $response = $this->get('/up');
 
         $response->assertStatus(200);
+    }
+
+    /**
+     * Test that Sentry Hub is created when DSN is empty (testing environment).
+     */
+    public function test_sentry_hub_is_created_when_dsn_is_empty(): void
+    {
+        // DSN is empty in testing environment (via phpunit.xml)
+        $hub = $this->app->make(HubInterface::class);
+
+        $this->assertInstanceOf(HubInterface::class, $hub);
+        // Empty hub has no client
+        $this->assertNull($hub->getClient());
+    }
+
+    /**
+     * Test that Sentry alias resolves to HubInterface.
+     */
+    public function test_sentry_alias_resolves_to_hub(): void
+    {
+        $hub = $this->app->make('sentry');
+
+        $this->assertInstanceOf(HubInterface::class, $hub);
+    }
+
+    /**
+     * Test that tracing default integrations are disabled for Laravel 12 compatibility.
+     */
+    public function test_tracing_default_integrations_are_disabled(): void
+    {
+        $tracingConfig = config('sentry.tracing');
+
+        $this->assertIsArray($tracingConfig);
+        $this->assertFalse($tracingConfig['default_integrations']);
     }
 }
