@@ -83,7 +83,8 @@
     "extra": {
         "laravel": {
             "dont-discover": [
-                "sentry/sentry-laravel"
+                "sentry/sentry-laravel",
+                "laravel/telescope"
             ]
         }
     },
