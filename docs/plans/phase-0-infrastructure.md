@@ -1,5 +1,7 @@
 # Phase 0: Infrastructure Setup
 
+> **Detailed Sub-Plans:** See `docs/plans/phase-0/` directory for granular implementation steps.
+
 **Goal:** Set up development environment, CI/CD pipeline, error monitoring, and health checks before starting feature development.
 
 **Architecture:** Native PHP/PostgreSQL/Redis development, GitHub Actions for CI/CD, Sentry for error monitoring.
