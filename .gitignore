@@ -1,2 +1,29 @@
+# Legacy codebases (reference only)
 ScreenBuddiesBackoffice/
 ScreenBuddiesFlutterApp/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+
+# Logs
+*.log
+
+# Environment
+.env.local
+.env.*.local
+
+# Build artifacts
+*.orig
+
+# Temporary files
+tmp/
+temp/
